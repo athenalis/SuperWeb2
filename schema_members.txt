@@ -1,0 +1,15 @@
+--- TABLE: keluarga_members ---
+id                   | bigint unsigned      | Null: NO  | Key: PRI | Default: 
+offline_id           | varchar(255)         | Null: YES | Key: UNI | Default: 
+keluarga_form_id     | bigint unsigned      | Null: NO  | Key: MUL | Default: 
+nama                 | varchar(255)         | Null: NO  | Key:     | Default: 
+nik                  | varchar(255)         | Null: YES | Key:     | Default: 
+tanggal_lahir        | date                 | Null: YES | Key:     | Default: 
+umur                 | int                  | Null: YES | Key:     | Default: 
+pekerjaan            | varchar(255)         | Null: YES | Key:     | Default: 
+pendidikan           | varchar(255)         | Null: YES | Key:     | Default: 
+penghasilan          | varchar(255)         | Null: YES | Key:     | Default: 
+foto_ktp             | varchar(255)         | Null: YES | Key:     | Default: 
+hubungan             | enum('ayah','ibu','anak','lainnya') | Null: NO  | Key:     | Default: lainnya
+created_at           | timestamp            | Null: YES | Key:     | Default: 
+updated_at           | timestamp            | Null: YES | Key:     | Default: 

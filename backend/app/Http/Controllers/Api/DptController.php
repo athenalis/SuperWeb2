@@ -1,0 +1,225 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Models\Dpt;
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+
+class DptController extends Controller
+{
+    private function legendDensityVillage(): array
+    {
+        return [
+            [
+                'min'   => 56001,
+                'max'   => 70000,
+                'color' => '#bd0026',
+                'label' => 'Prioritas Utama (56 – 70 rb)',
+            ],
+            [
+                'min'   => 40001,
+                'max'   => 56000,
+                'color' => '#f03b20',
+                'label' => 'Prioritas Tinggi (40 – 56 rb)',
+            ],
+            [
+                'min'   => 25001,
+                'max'   => 40000,
+                'color' => '#fd8d3c',
+                'label' => 'Prioritas Sedang (25 – 40 rb)',
+            ],
+            [
+                'min'   => 12001,
+                'max'   => 25000,
+                'color' => '#fecc5c',
+                'label' => 'Prioritas Rendah (12 – 25 rb)',
+            ],
+            [
+                'min'   => 0,
+                'max'   => 12000,
+                'color' => '#ffffb2',
+                'label' => 'Prioritas Sangat Rendah (0 – 12 rb)',
+            ],
+        ];
+    }
+
+    private function legendDensityDistrict(): array
+    {
+        return [
+            ['min' => 0,       'max' => 20000,  'color' => '#FFFFCC', 'label' => '0 – 20 rb'],
+            ['min' => 20001,   'max' => 50000,  'color' => '#FED976', 'label' => '20 – 50 rb'],
+            ['min' => 50001,   'max' => 90000,  'color' => '#FEB24C', 'label' => '50 – 90 rb'],
+            ['min' => 90001,   'max' => 130000, 'color' => '#FD8D3C', 'label' => '90 – 130 rb'],
+            ['min' => 130001,  'max' => 170000, 'color' => '#F03B20', 'label' => '130 – 170 rb'],
+            ['min' => 170001,  'max' => 200000, 'color' => '#BD0026', 'label' => '170 – 200 rb'],
+        ];
+    }
+
+    private function colorFromDensity(float $density, array $legend): string
+    {
+        foreach ($legend as $r) {
+            if ($density >= $r['min'] && $density <= $r['max']) {
+                return $r['color'];
+            }
+        }
+        return '#FFFFCC';
+    }
+
+    private function legendInfoFromDensity(float $density, array $legend): array
+    {
+        foreach ($legend as $r) {
+            if ($density >= $r['min'] && $density <= $r['max']) {
+                return [
+                    'color' => $r['color'],
+                    'label' => $r['label'],
+                ];
+            }
+        }
+
+        return [
+            'color' => '#ffffb2',
+            'label' => 'Tidak Diklasifikasikan',
+        ];
+    }
+
+    private function priorityTextFromLabel(string $label): string
+    {
+        if (str_contains($label, 'Utama')) return 'Prioritas Utama';
+        if (str_contains($label, 'Tinggi')) return 'Prioritas Tinggi';
+        if (str_contains($label, 'Sedang')) return 'Prioritas Sedang';
+        if (str_contains($label, 'Rendah') && !str_contains($label, 'Sangat'))
+            return 'Prioritas Rendah';
+        if (str_contains($label, 'Sangat'))
+            return 'Prioritas Sangat Rendah';
+
+        return 'Tidak Diklasifikasikan';
+    }
+
+    public function dptVillage()
+    {
+        $cacheKey = 'map:dpt:density:village';
+
+        return Cache::remember($cacheKey, now()->addHours(6), function () {
+
+            $legend = $this->legendDensityVillage();
+
+            $rows = DB::table('regions as r')
+                ->leftJoin('dpt as d', function ($join) {
+                    $join->on('d.province', '=', 'r.province')
+                        ->on('d.city', '=', 'r.city')
+                        ->on('d.district', '=', 'r.district')
+                        ->on('d.village', '=', 'r.village');
+                })
+                ->where('r.level', 'VILLAGE')
+                ->select(
+                    'r.province',
+                    'r.city',
+                    'r.district',
+                    'r.village',
+                    'r.area_km2',
+                    DB::raw('COUNT(d.id) as total_dpt'),
+                    DB::raw('
+                        CASE 
+                            WHEN r.area_km2 > 0 
+                            THEN ROUND(COUNT(d.id) / r.area_km2, 2)
+                            ELSE 0 
+                        END as density
+                    ')
+                )
+                ->groupBy(
+                    'r.province',
+                    'r.city',
+                    'r.district',
+                    'r.village',
+                    'r.area_km2'
+                )
+                ->orderByDesc('density')
+                ->get();
+
+            $data = $rows->map(function ($item) use ($legend) {
+                $legendInfo = $this->legendInfoFromDensity($item->density, $legend);
+                return [
+                    'province'  => $item->province,
+                    'city'      => $item->city,
+                    'district'  => $item->district,
+                    'village'   => $item->village,
+                    'area_km2'  => (float) $item->area_km2,
+                    'total_dpt' => (int) $item->total_dpt,
+                    'density'   => (float) $item->density,
+                    'color'     => $legendInfo['color'],
+                    'priority'  => $this->priorityTextFromLabel($legendInfo['label']),
+                ];
+            });
+
+            return [
+                'level'  => 'village',
+                'count'  => $data->count(),
+                'legend' => $legend,
+                'data'   => $data,
+            ];
+        });
+    }
+
+    public function dptDistrict()
+    {
+        $cacheKey = 'map:dpt:density:district';
+
+        return Cache::remember($cacheKey, now()->addHours(6), function () {
+
+            $legend = $this->legendDensityDistrict();
+
+            $rows = DB::table('regions as r')
+                ->leftJoin('dpt as d', function ($join) {
+                    $join->on('d.province', '=', 'r.province')
+                        ->on('d.city', '=', 'r.city')
+                        ->on('d.district', '=', 'r.district');
+                })
+                ->where('r.level', 'DISTRICT')
+                ->select(
+                    'r.province',
+                    'r.city',
+                    'r.district',
+                    'r.area_km2',
+                    DB::raw('COUNT(d.id) as total_dpt'),
+                    DB::raw('
+                        CASE 
+                            WHEN r.area_km2 > 0 
+                            THEN ROUND(COUNT(d.id) / r.area_km2, 2)
+                            ELSE 0 
+                        END as density
+                    ')
+                )
+                ->groupBy(
+                    'r.province',
+                    'r.city',
+                    'r.district',
+                    'r.area_km2'
+                )
+                ->orderByDesc('density')
+                ->get();
+
+            $data = $rows->map(function ($item) use ($legend) {
+                return [
+                    'province'  => $item->province,
+                    'city'      => $item->city,
+                    'district'  => $item->district,
+                    'area_km2'  => (float) $item->area_km2,
+                    'total_dpt' => (int) $item->total_dpt,
+                    'density'   => (float) $item->density,
+                    'color'     => $legendInfo['color'],
+                    'label'     => $legendInfo['label'],
+                ];
+            });
+
+            return [
+                'level'  => 'district',
+                'count'  => $data->count(),
+                'legend' => $legend,
+                'data'   => $data,
+            ];
+        });
+    }
+}

@@ -1,0 +1,8 @@
+--- TABLE: kepuasan_answers ---
+id                   | bigint unsigned      | Null: NO  | Key: PRI | Default: 
+kunjungan_id         | bigint unsigned      | Null: NO  | Key: MUL | Default: 
+tau_paslon           | tinyint(1)           | Null: YES | Key:     | Default: 
+pernah_dikunjungi    | tinyint(1)           | Null: YES | Key:     | Default: 
+ingin_memilih        | tinyint(1)           | Null: YES | Key:     | Default: 
+created_at           | timestamp            | Null: YES | Key:     | Default: 
+updated_at           | timestamp            | Null: YES | Key:     | Default: 
