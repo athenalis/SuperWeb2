@@ -10340,6 +10340,72 @@
             "properties": {
                 "name": "CIPAYUNG"
             }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            106.5401,
+                            -5.5893
+                        ],
+                        [
+                            106.6502,
+                            -5.5893
+                        ],
+                        [
+                            106.6502,
+                            -5.5051
+                        ],
+                        [
+                            106.5401,
+                            -5.5051
+                        ],
+                        [
+                            106.5401,
+                            -5.5893
+                        ]
+                    ]
+                ]
+            },
+            "properties": {
+                "name": "KEPULAUAN SERIBU UTARA"
+            }
+        },
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            106.6502,
+                            -5.7754
+                        ],
+                        [
+                            106.8504,
+                            -5.7754
+                        ],
+                        [
+                            106.8504,
+                            -5.5893
+                        ],
+                        [
+                            106.6502,
+                            -5.5893
+                        ],
+                        [
+                            106.6502,
+                            -5.7754
+                        ]
+                    ]
+                ]
+            },
+            "properties": {
+                "name": "KEPULAUAN SERIBU SELATAN"
+            }
         }
     ]
 }

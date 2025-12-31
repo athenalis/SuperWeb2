@@ -375,8 +375,14 @@ class RelawanController extends Controller
         return response()->json([
             'status'  => true,
             'message' => 'Relawan berhasil diperbarui',
-            'data'    => $relawan->load('ormas')
-        ]);
+            'data'    => [
+                'relawan' => $relawan->load('ormas'),
+                'user' => [
+                    'email'    => $newEmail,
+                    'password' => $newPasswordPlain,
+                ]
+            ]
+        ]);        
     }
 
 public function destroy($id)

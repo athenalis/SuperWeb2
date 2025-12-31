@@ -340,8 +340,14 @@ class CoordinatorController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Koordinator berhasil diperbarui',
-            'data' => $koordinator
-        ]);
+            'data' => [
+                'koordinator' => $koordinator,
+                'user' => [
+                    'email'    => $newEmail,
+                    'password' => $newPasswordPlain,
+                ]
+            ]
+        ]);        
     }
 
 public function destroy($id)

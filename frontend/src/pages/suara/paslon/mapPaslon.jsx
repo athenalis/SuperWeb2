@@ -1,15 +1,55 @@
-import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
-import { useEffect, useMemo, useRef } from "react";
+import { MapContainer, TileLayer, GeoJSON, useMap } from "react-leaflet";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
+import api from "../../../lib/axios";
 
-const fmt = n => Number(n || 0).toLocaleString("id-ID");
+/* ===================== */
+/*  UTIL                 */
+/* ===================== */
+const fmt = (n) => Number(n || 0).toLocaleString("id-ID");
 
 const normalizeKey = (str = "") =>
-  str
-    .toString()
-    .toUpperCase()
-    .replace(/[^A-Z]/g, "");
+  str.toString().toUpperCase().replace(/[^A-Z0-9]/g, "");
 
+/* ===================== */
+/*  ALIAS FIX DKI        */
+/* ===================== */
+export const CITY_ALIAS_RAW = {
+  // Jakarta
+  KOTAADMJAKARTABARAT: "JAKARTABARAT",
+  KOTAADMJAKARTAPUSAT: "JAKARTAPUSAT",
+  KOTAADMJAKARTASELATAN: "JAKARTASELATAN",
+  KOTAADMJAKARTATIMUR: "JAKARTATIMUR",
+  KOTAADMJAKARTAUTARA: "JAKARTAUTARA",
+
+  // Kepulauan Seribu (SEMUA VARIASI → SATU)
+  KABADMKEPSERIBU: "KEPULAUANSERIBU",
+  KABUPATENADMKEPULAUANSERIBU: "KEPULAUANSERIBU",
+  ADMKEPSERIBU: "KEPULAUANSERIBU",
+  KEPULAUANSERIBU: "KEPULAUANSERIBU",
+};
+
+
+export const normalizeCityName = (name = "") => {
+  const key = name
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/\./g, "");
+
+  return CITY_ALIAS_RAW[key] || key;
+};
+
+const CITY_ALIAS = Object.fromEntries(
+  Object.entries(CITY_ALIAS_RAW).map(([k, v]) => [
+    normalizeKey(k),
+    normalizeKey(v),
+  ])
+);
+
+const getCityKey = (name = "") => {
+  const raw = normalizeKey(name);
+  return CITY_ALIAS[raw] || raw;
+};
 
 const VILLAGE_ALIAS_RAW = {
   HALIMPERDANAKUSUMAH: "HALIMPERDANAKUSUMA",
@@ -34,222 +74,177 @@ const getVillageKey = (name = "") => {
   return VILLAGE_ALIAS[raw] || raw;
 };
 
-export default function KelurahanMap({
-  geoVillage,
-  geoSeribu,
-  suaraKelurahan,
-}) {
-  const mapRef = useRef();
+const getWinnerColor = (d) => d?.winner_color || "#e5e7eb";
 
-  const villageVotes = useMemo(() => {
-    const out = {};
-    Object.entries(suaraKelurahan || {}).forEach(([name, vote]) => {
-      out[getVillageKey(name)] = vote;
-    });
-    return out;
-  }, [suaraKelurahan]);
+/* ===================== */
+/*  ZOOM WATCHER         */
+/* ===================== */
+function ZoomWatcher({ onChange }) {
+  const map = useMap();
 
   useEffect(() => {
-    console.log("🔍 SAMPLE DB:", Object.entries(villageVotes)[0]);
-  }, [villageVotes]);
+    const handler = () => {
+      const z = map.getZoom();
+      if (z <= 10) onChange("kota");
+      else if (z <= 12) onChange("kecamatan");
+      else onChange("kelurahan");
+    };
 
-  const getWinnerColor = ({ paslon_01 = 0, paslon_02 = 0, paslon_03 = 0 }) => {
-    const max = Math.max(paslon_01, paslon_02, paslon_03);
-    if (max === paslon_01) return "#FFD100";
-    if (max === paslon_02) return "#16a34a";
-    return "#C40000";
+    handler();
+    map.on("zoomend", handler);
+    return () => map.off("zoomend", handler);
+  }, [map, onChange]);
+
+  return null;
+}
+
+/* ===================== */
+/*  MAIN COMPONENT       */
+/* ===================== */
+export default function MapPaslon({
+  geoCity,
+  geoDistrict,
+  geoVillage,
+}) {
+  const mapRef = useRef();
+  const [level, setLevel] = useState("kota");
+  const [rows, setRows] = useState([]);
+
+  /* ===================== */
+  /*  ENDPOINT             */
+  /* ===================== */
+  const endpoint = useMemo(() => {
+    if (level === "kota") return "/peta/paslon/kota";
+    if (level === "kecamatan") return "/peta/paslon/kecamatan";
+    return "/peta/paslon/kelurahan";
+  }, [level]);
+
+  /* ===================== */
+  /*  FETCH DATA           */
+  /* ===================== */
+  useEffect(() => {
+    api
+      .get(endpoint)
+      .then((res) => {
+        console.log("API RESPONSE:", res.data);
+        setRows(res.data?.data || []);
+      })
+      .catch((err) => {
+        console.error(
+          "API ERROR:",
+          err.response?.status,
+          err.response?.data || err.message
+        );
+        setRows([]);
+      });
+  }, [endpoint]);
+
+  /* ===================== */
+  /*  INDEX VOTE DATA      */
+  /* ===================== */
+  const voteMap = useMemo(() => {
+    const out = {};
+    rows.forEach((r) => {
+      if (level === "kota") out[getCityKey(r.city)] = r;
+      else if (level === "kecamatan") out[normalizeKey(r.district)] = r;
+      else out[getVillageKey(r.village)] = r;
+    });
+    return out;
+  }, [rows, level]);
+
+  /* ===================== */
+  /*  GEO DATA             */
+  /* ===================== */
+  const geoData =
+    level === "kota"
+      ? geoCity
+      : level === "kecamatan"
+      ? geoDistrict
+      : geoVillage;
+
+  const getGeoName = (p = {}) => {
+    if (level === "kota") return p.NAMOBJ || p.WADMKK || "";
+    if (level === "kecamatan") return p.WADMKC || p.NAMOBJ || "";
+    return p.WADMKD || p.NAMOBJ || "";
   };
 
-  const getGeoVillageName = (properties = {}) => {
-    return (
-      properties.village ||
-      properties.NAMOBJ ||
-      properties.WADMKD ||
-      properties.NAME ||
-      ""
-    );
-  };
-
-  const getKelurahanData = (name = "") => {
-    const key = getVillageKey(name);
-    return villageVotes[key] || null;
-  };
-
-
+  /* ===================== */
+  /*  STYLE                */
+  /* ===================== */
   const styleFeature = ({ properties }) => {
-    const name = getGeoVillageName(properties);
-    const data = getKelurahanData(name);
+    const name = getGeoName(properties);
+    const key =
+      level === "kota"
+        ? getCityKey(name)
+        : level === "kelurahan"
+        ? getVillageKey(name)
+        : normalizeKey(name);
+
+    const d = voteMap[key];
 
     return {
-      fillColor: data ? getWinnerColor(data) : "#e5e7eb",
+      fillColor: d ? getWinnerColor(d) : "#e5e7eb",
       color: "#ffffff",
-      weight: 0.4,
+      weight: 0.6,
       fillOpacity: 0.85,
     };
   };
 
+  /* ===================== */
+  /*  TOOLTIP              */
+  /* ===================== */
+  const onEachFeature = (feature, layer) => {
+    const name = getGeoName(feature.properties);
+    const key =
+      level === "kota"
+        ? getCityKey(name)
+        : level === "kelurahan"
+        ? getVillageKey(name)
+        : normalizeKey(name);
 
-const onEachFeature = (feature, layer) => {
-  const p = feature.properties;
-  const name = p.village || p.NAMOBJ || p.WADMKD || "Unknown";
-  const key = getVillageKey(name);
-  const v = villageVotes[key];
+    const d = voteMap[key];
 
-  let html = `
-    <div style="
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      font-size: 12px;
-      min-width: 200px;
-    ">
-      <div style="
-        font-weight: 600;
-        font-size: 13px;
-        margin-bottom: 6px;
-      ">
-        ${name}
-      </div>
-  `;
+    let html = `<strong>${name}</strong>`;
+    if (d) {
+      html += `
+        <hr/>
+        <div>Paslon 01: <b>${fmt(d.suara.paslon_01)}</b></div>
+        <div>Paslon 02: <b>${fmt(d.suara.paslon_02)}</b></div>
+        <div>Paslon 03: <b>${fmt(d.suara.paslon_03)}</b></div>
+      `;
+    } else {
+      html += `<div><i>Data tidak tersedia</i></div>`;
+    }
 
-  if (v) {
-    html += `
-      <div style="
-        border-top: 1px solid #e5e7eb;
-        padding-top: 6px;
-        line-height: 1.5;
-      ">
-        ${[
-          ["#FFD100", "Ridwan Kamil – Suswono", v.paslon_01],
-          ["#16a34a", "Dharma Pongrekun – Kun Wardana Abyoto", v.paslon_02],
-          ["#C40000", "Pramono Anung Wibowo – Rano Karno", v.paslon_03],
-        ]
-          .map(
-            ([color, label, value]) => `
-              <div style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-top: 4px;
-              ">
-                <div style="
-                  display: flex;
-                  align-items: center;
-                  gap: 6px;
-                  color: #374151;
-                ">
-                  <span style="
-                    width: 8px;
-                    height: 8px;
-                    border-radius: 999px;
-                    background: ${color};
-                    display: inline-block;
-                  "></span>
-                  <span>${label}</span>
-                </div>
+    layer.bindTooltip(html, { sticky: true });
+  };
 
-                <strong style="color:#111827">
-                  ${fmt(value)}
-                </strong>
-              </div>
-            `
-          )
-          .join("")}
-      </div>
-    `;
-  } else {
-    html += `
-      <div style="
-        margin-top: 6px;
-        color: #6b7280;
-        font-style: italic;
-      ">
-        Data tidak tersedia
-      </div>
-    `;
-  }
-
-  html += `</div>`;
-
-  layer.bindTooltip(html, {
-    sticky: true,
-    direction: "top",
-    opacity: 0.95,
-  });
-
-  layer.on({
-    mouseover: () =>
-      layer.setStyle({
-        weight: 1.5,
-      }),
-    mouseout: () =>
-      layer.setStyle({
-        weight: 0.7,
-      }),
-  });
-};
-
-
+  /* ===================== */
+  /*  RENDER               */
+  /* ===================== */
   return (
     <div className="relative w-full h-full">
       <MapContainer
         ref={mapRef}
         center={[-6.2, 106.8]}
-        zoom={11}
-        className="h-full w-full"
+        zoom={10}
+        className="w-full h-full"
       >
+        <ZoomWatcher onChange={setLevel} />
+
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <GeoJSON
-          data={geoVillage}
+          key={level}
+          data={geoData}
           style={styleFeature}
           onEachFeature={onEachFeature}
         />
       </MapContainer>
 
-      {geoSeribu && (
-        <div className="absolute bottom-3 right-3 w-44 h-44 bg-white border rounded shadow">
-          <MapContainer
-            center={[-5.8, 106.6]}
-            zoom={9}
-            zoomControl={false}
-            dragging={false}
-            scrollWheelZoom={false}
-            className="h-full w-full"
-          >
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            <GeoJSON
-              data={geoSeribu}
-              style={styleFeature}
-              onEachFeature={onEachFeature}
-            />
-          </MapContainer>
-        </div>
-      )}
-
-      <div
-        className="
-        absolute bottom-4 right-4
-        bg-white/90 backdrop-blur
-        rounded-xl shadow-lg
-        px-4 py-3 text-xs
-        space-y-2 z-[500]
-      "
-      >
-        <div className="flex items-center gap-2">
-          <span className="w-4 h-4 rounded bg-[#FFD100]" />
-          <span>Ridwan Kamil - Suswono (Paslon 01)</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="w-4 h-4 rounded bg-[#16a34a]" />
-          <span>Dharma Pongrekun - Kun Wardana Abyoto (Paslon 02)</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="w-4 h-4 rounded bg-[#C40000]" />
-          <span>Pramono Anung Wibowo - Rano Karno (Paslon 03)</span>
-        </div>
+      <div className="absolute top-4 right-4 bg-white px-3 py-2 rounded shadow text-xs">
+        Menampilkan: <b>{level.toUpperCase()}</b>
       </div>
-
     </div>
   );
 }

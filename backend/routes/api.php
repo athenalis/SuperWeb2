@@ -83,10 +83,14 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::get('/diagram-partai', [SuaraController::class, 'diagramPartai']);
     });
     Route::prefix('peta')->group(function () {
-        Route::get('/paslon', [PetaSuaraController::class, 'perKelurahan']);
+        Route::get('/paslon/kelurahan', [PetaSuaraController::class, 'perKelurahan']);
+        Route::get('/paslon/kecamatan', [PetaSuaraController::class, 'perKecamatan']);
+        Route::get('/paslon/kota', [PetaSuaraController::class, 'perKota']);
         Route::get('/dpt-villages', [DptController::class, 'dptVillage']);
         Route::get('/dpt-district', [DptController::class, 'dptDistrict']);
+        Route::get('/dpt-city', [DptController::class, 'dptCity']);
         Route::get('/partai/kecamatan', [PetaPartaiController::class, 'perKecamatan']);
+        Route::get('/partai/kota', [PetaPartaiController::class, 'perKota']);
     });
     Route::prefix('analisis')->group(function () {
         Route::get('/straight-ticket/district', [Analisis::class, 'straightTicketByDistrict']);

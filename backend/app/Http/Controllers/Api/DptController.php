@@ -49,12 +49,36 @@ class DptController extends Controller
     private function legendDensityDistrict(): array
     {
         return [
-            ['min' => 0,       'max' => 20000,  'color' => '#FFFFCC', 'label' => '0 – 20 rb'],
-            ['min' => 20001,   'max' => 50000,  'color' => '#FED976', 'label' => '20 – 50 rb'],
-            ['min' => 50001,   'max' => 90000,  'color' => '#FEB24C', 'label' => '50 – 90 rb'],
-            ['min' => 90001,   'max' => 130000, 'color' => '#FD8D3C', 'label' => '90 – 130 rb'],
-            ['min' => 130001,  'max' => 170000, 'color' => '#F03B20', 'label' => '130 – 170 rb'],
-            ['min' => 170001,  'max' => 200000, 'color' => '#BD0026', 'label' => '170 – 200 rb'],
+            [
+                'min'   => 320001,
+                'max'   => 400000,
+                'color' => '#bd0026',
+                'label' => 'Prioritas Utama (320 – 400 rb)',
+            ],
+            [
+                'min'   => 240001,
+                'max'   => 320000,
+                'color' => '#f03b20',
+                'label' => 'Prioritas Tinggi (240 – 320 rb)',
+            ],
+            [
+                'min'   => 160001,
+                'max'   => 240000,
+                'color' => '#fd8d3c',
+                'label' => 'Prioritas Sedang (160 – 240 rb)',
+            ],
+            [
+                'min'   => 80001,
+                'max'   => 160000,
+                'color' => '#fecc5c',
+                'label' => 'Prioritas Rendah (80 – 160 rb)',
+            ],
+            [
+                'min'   => 0,
+                'max'   => 80000,
+                'color' => '#ffffb2',
+                'label' => 'Prioritas Sangat Rendah (0 – 80 rb)',
+            ],
         ];
     }
 
@@ -202,6 +226,8 @@ class DptController extends Controller
                 ->get();
 
             $data = $rows->map(function ($item) use ($legend) {
+                $legendInfo = $this->legendInfoFromDensity($item->density, $legend);
+
                 return [
                     'province'  => $item->province,
                     'city'      => $item->city,
@@ -210,7 +236,7 @@ class DptController extends Controller
                     'total_dpt' => (int) $item->total_dpt,
                     'density'   => (float) $item->density,
                     'color'     => $legendInfo['color'],
-                    'label'     => $legendInfo['label'],
+                    'priority'  => $this->priorityTextFromLabel($legendInfo['label']),
                 ];
             });
 

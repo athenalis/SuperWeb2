@@ -152,41 +152,50 @@ export default function Relawan() {
   // =====================
 
   const handleConfirmExport = async () => {
+    if (!exportPassword) {
+      toast.error("Masukkan password terlebih dahulu");
+      return;
+    }
+
     const toastId = "export-relawan";
-    setExporting(true);
-    toast.loading("Menyiapkan file Excel...", { id: toastId });
 
     try {
+      setExporting(true);
+      toast.loading("Menyiapkan file Excel...", { id: toastId });
+
       const res = await api.post(
         "/relawan/export-all",
         { password: exportPassword },
-        { responseType: "blob" } // tetap blob agar bisa download
+        { responseType: "blob" }
       );
 
-      // kalau sukses, lanjut download
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
       link.href = url;
 
       const disposition = res.headers["content-disposition"];
-      const filename = disposition?.split("filename=")[1]?.replace(/"/g, '') || "relawan.xlsx";
+      const filename =
+        disposition?.split("filename=")[1]?.replace(/"/g, "") ||
+        "relawan.xlsx";
+
       link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
 
       toast.success("Export berhasil", { id: toastId });
+
+      // ✅ TUTUP MODAL HANYA JIKA SUKSES
       setShowPasswordModal(false);
       setExportPassword("");
       setShowExportPassword(false);
-
     } catch (err) {
-      if (err.response?.status === 422) {
-        // tangani error password salah
-        toast.error(err.response?.data?.message || "Password salah", { id: toastId });
-      } else {
-        toast.error("Gagal export", { id: toastId });
-      }
+      toast.error(
+        err.response?.status === 422
+          ? err.response?.data?.message || "Password salah"
+          : "Gagal export",
+        { id: toastId }
+      );
     } finally {
       setExporting(false);
     }
@@ -545,7 +554,7 @@ export default function Relawan() {
 
       {deleteTarget &&
         createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div
               className="absolute inset-0 bg-black/50 backdrop-blur-sm"
               onClick={() => setDeleteTarget(null)}
@@ -625,7 +634,7 @@ export default function Relawan() {
       {/* ================= MODAL IMPORT ================= */}
       {openImport &&
         createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
 
             {/* BACKDROP */}
             <div
@@ -720,7 +729,7 @@ export default function Relawan() {
 
             {successMessage && createPortal(
               <div
-                className="fixed bottom-5 right-5 z-[9999] bg-green-600 text-white px-5 py-3 rounded-lg shadow-lg"
+                className="fixed bottom-5 right-5 z-50 bg-green-600 text-white px-5 py-3 rounded-lg shadow-lg"
                 onClick={() => setSuccessMessage("")} // klik untuk close
               >
                 {successMessage}
@@ -734,33 +743,56 @@ export default function Relawan() {
       {/* ================= MODAL PASSWORD EXPORT ================= */}
       {showPasswordModal &&
         createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+            {/* BACKDROP */}
             <div
-              className="absolute inset-0 bg-black/50"
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
               onClick={closeExportModal}
             />
 
+            {/* MODAL */}
+            <div className="relative bg-white w-full max-w-md rounded-2xl p-6 z-10 shadow-2xl">
 
-            <div className="bg-white w-full max-w-md rounded-xl p-6 z-10">
-              <h2 className="text-xl font-semibold mb-3">
-                Konfirmasi Password
-              </h2>
+              <div className="mb-5">
+                <h2 className="text-xl font-semibold text-slate-800">
+                  Konfirmasi Password
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Masukkan password akun untuk melanjutkan export data
+                </p>
+              </div>
 
-              <div className="relative mb-4">
-
-                {/* FAKE USERNAME → CEGAT EMAIL AUTOFILL */}
+              <div className="relative mb-6">
+                {/* ===== FAKE EMAIL (ANTI AUTOFILL) ===== */}
                 <input
-                  type="text"
-                  name="username"
-                  autoComplete="username"
-                  className="hidden"
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  tabIndex={-1}
+                  className="absolute -left-[9999px] opacity-0"
                 />
-                l
+
+                {/* ===== FAKE PASSWORD PAIR ===== */}
                 <input
-                  type={showExportPassword ? "text" : "password"}
+                  type="password"
                   name="password"
                   autoComplete="current-password"
-                  className="w-full border rounded-lg px-4 py-2 pr-12"
+                  tabIndex={-1}
+                  className="absolute -left-[9999px] opacity-0"
+                />
+
+                {/* ===== PASSWORD ASLI ===== */}
+                <Icon
+                  icon="mdi:lock-outline"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  width={22}
+                />
+
+                <input
+                  type={showExportPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  className="w-full border rounded-xl pl-12 pr-12 py-3
+                       focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Password akun"
                   value={exportPassword}
                   onChange={(e) => setExportPassword(e.target.value)}
@@ -772,7 +804,7 @@ export default function Relawan() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"
                 >
                   <Icon
-                    icon={showExportPassword ? "mdi:eye-off" : "mdi:eye"}
+                    icon={showExportPassword ? "mdi:eye-off-outline" : "mdi:eye-outline"}
                     width={22}
                   />
                 </button>
@@ -781,7 +813,9 @@ export default function Relawan() {
               <div className="flex justify-end gap-3">
                 <button
                   onClick={closeExportModal}
-                  className="px-4 py-2 border rounded-lg"
+                  disabled={exporting}
+                  className="px-4 py-2 rounded-lg border text-slate-600
+                       hover:bg-slate-100 disabled:opacity-50"
                 >
                   Batal
                 </button>
@@ -789,15 +823,17 @@ export default function Relawan() {
                 <button
                   onClick={handleConfirmExport}
                   disabled={!exportPassword || exporting}
-                  className="px-5 py-2 bg-blue-900 text-white rounded-lg"
+                  className="px-5 py-2 rounded-lg bg-blue-900 text-white
+                       hover:bg-blue-800 disabled:opacity-50"
                 >
-                  {exporting ? "Memproses..." : "Export"}
+                  Export
                 </button>
               </div>
             </div>
           </div>,
           document.getElementById("modal-root")
         )}
+
     </div>
   );
 }

@@ -17,72 +17,64 @@ class Analisis extends Controller
             '03' => [100003],
         ];
 
-        // 1️⃣ PASLON PER KECAMATAN + SUARA
-        $paslonWinners = VoteCount::select(
+        // 1️⃣ PASLON + SUARA
+        $paslon = VoteCount::select(
                 'district',
                 'district_code',
-                DB::raw('SUM(suara_paslon_01) as votes_01'),
-                DB::raw('SUM(suara_paslon_02) as votes_02'),
-                DB::raw('SUM(suara_paslon_03) as votes_03')
+                DB::raw('SUM(suara_paslon_01) as v01'),
+                DB::raw('SUM(suara_paslon_02) as v02'),
+                DB::raw('SUM(suara_paslon_03) as v03')
             )
             ->groupBy('district', 'district_code')
             ->get()
-            ->map(function ($row) {
-                $votes = [
-                    '01' => $row->votes_01,
-                    '02' => $row->votes_02,
-                    '03' => $row->votes_03,
-                ];
+            ->keyBy('district_code');
 
-                arsort($votes);
-                $winner = array_key_first($votes);
-
-                return [
-                    'district' => $row->district,
-                    'district_code' => $row->district_code,
-                    'winner_paslon' => $winner,
-                    'votes_paslon_01' => (int) $row->votes_01,
-                    'votes_paslon_02' => (int) $row->votes_02,
-                    'votes_paslon_03' => (int) $row->votes_03,
-                ];
-            });
-
-        // 2️⃣ PARTAI DOMINAN + SUARA
-        $partyWinners = PartyVote::select(
+        // 2️⃣ PARTAI + SUARA (SEMUA)
+        $parties = PartyVote::select(
                 'district_code',
                 'party_code',
-                DB::raw('SUM(jumlah) as party_votes')
+                DB::raw('SUM(jumlah) as votes')
             )
             ->groupBy('district_code', 'party_code')
-            ->orderByDesc('party_votes')
             ->get()
-            ->groupBy('district_code')
-            ->map(fn ($items) => $items->first());
+            ->groupBy('district_code');
 
-        // 3️⃣ MERGE + KATEGORI
-        $result = $paslonWinners->map(function ($d) use ($partyWinners, $coalitions) {
-            $party = $partyWinners[$d['district_code']] ?? null;
+        // 3️⃣ BUILD RESPONSE
+        $result = [];
 
-            if (!$party) {
-                return array_merge($d, [
-                    'category' => 'Non-Partisan',
-                ]);
+        foreach ($paslon as $districtCode => $row) {
+            $votesPaslon = [
+                '01' => (int) $row->v01,
+                '02' => (int) $row->v02,
+                '03' => (int) $row->v03,
+            ];
+
+            arsort($votesPaslon);
+            $winner = array_key_first($votesPaslon);
+
+            $partyVotes = [];
+            foreach ($parties[$districtCode] ?? [] as $p) {
+                $partyVotes[$p->party_code] = (int) $p->votes;
             }
 
-            $category = in_array(
-                $party->party_code,
-                $coalitions[$d['winner_paslon']] ?? []
-            )
+            arsort($partyVotes);
+            $dominantParty = array_key_first($partyVotes);
+
+            $category = isset($partyVotes[$dominantParty]) &&
+                in_array($dominantParty, $coalitions[$winner] ?? [])
                 ? 'Straight Ticket'
                 : 'Split Ticket';
 
-            return array_merge($d, [
-                'party_winner' => $party->party_code,
-                'party_votes' => (int) $party->party_votes,
+            $result[] = [
+                'district' => $row->district,
+                'district_code' => $districtCode,
+                'winner_paslon' => $winner,
+                'votes_paslon' => $votesPaslon,
+                'party_votes' => $partyVotes,
                 'category' => $category,
-            ]);
-        });
+            ];
+        }
 
-        return response()->json($result->values());
+        return response()->json($result);
     }
 }

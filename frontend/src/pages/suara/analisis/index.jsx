@@ -19,19 +19,24 @@ const PASLON_NAMES = {
 };
 
 const PARTY_NAMES = {
-  100001: "PKB",
-  100002: "Gerindra",
-  100003: "PDIP",
-  100004: "Golkar",
-  100005: "NasDem",
-  100006: "Demokrat",
-  100007: "PAN",
-  100008: "PKS",
-  100009: "PPP",
-  100010: "Perindo",
-  100011: "PSI",
-  100012: "Hanura",
-  100024: "UMMAT",
+  "100001": "PKB",
+  "100002": "GERINDRA",
+  "100003": "PDIP",
+  "100004": "GOLKAR",
+  "100005": "NASDEM",
+  "100006": "BURUH",
+  "100007": "GELORA",
+  "100008": "PKS",
+  "100009": "PKN",
+  "100010": "HANURA",
+  "100011": "GARUDA",
+  "100012": "PAN",
+  "100013": "PBB",
+  "100014": "DEMOKRAT",
+  "100015": "PSI",
+  "100016": "PERINDO",
+  "100017": "PPP",
+  "100024": "UMMAT",
 };
 
 /* =========================
@@ -235,38 +240,48 @@ function PaslonModal({ data, onClose }) {
       </button>
 
     {open === key && (
-      <div className="px-4 py-3 bg-gray-50 text-sm space-y-3">
-        
-        {/* PASLON */}
-        <div>
-          <div className="text-gray-500">Paslon Pemenang</div>
-          <div className="font-semibold">
-            {PASLON_NAMES[d.winner_paslon]}
-          </div>
-          <div className="text-gray-700">
-            {(
-              d.winner_paslon === "01"
-                ? d.votes_paslon_01
-                : d.winner_paslon === "02"
-                ? d.votes_paslon_02
-                : d.votes_paslon_03
-            ).toLocaleString("id-ID")} suara
-          </div>
-        </div>
+  <div className="px-4 py-3 bg-gray-50 text-sm space-y-4">
 
-        {/* PARTAI */}
-        <div>
-          <div className="text-gray-500">Partai Dominan</div>
-          <div className="font-semibold">
-            {PARTY_NAMES[d.party_winner]}
-          </div>
-          <div className="text-gray-700">
-            {d.party_votes.toLocaleString("id-ID")} suara
-          </div>
-        </div>
-
+    {/* PASLON */}
+    <div>
+      <div className="font-semibold text-gray-700 mb-1">
+        Suara Paslon
       </div>
-    )}
+      <div className="space-y-1">
+        {Object.entries(d.votes_paslon)
+          .sort((a, b) => b[1] - a[1])
+          .map(([code, votes]) => (
+            <div key={code} className="flex justify-between">
+              <span>{PASLON_NAMES[code]}</span>
+              <span className="font-medium">
+                {votes.toLocaleString("id-ID")}
+              </span>
+            </div>
+          ))}
+      </div>
+    </div>
+
+    {/* PARTAI */}
+    <div>
+      <div className="font-semibold text-gray-700 mb-1">
+        Suara Partai
+      </div>
+      <div className="space-y-1">
+        {Object.entries(d.party_votes)
+          .sort((a, b) => b[1] - a[1])
+          .map(([code, votes]) => (
+            <div key={code} className="flex justify-between">
+              <span>{PARTY_NAMES[code]}</span>
+              <span className="font-medium">
+                {votes.toLocaleString("id-ID")}
+              </span>
+            </div>
+          ))}
+      </div>
+    </div>
+
+  </div>
+)}
 
     </div>
   );

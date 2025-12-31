@@ -9,14 +9,17 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithCustomStartCell;
 use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 
 class RelawanExport implements
     FromCollection,
     WithHeadings,
     ShouldAutoSize,
     WithCustomStartCell,
-    WithEvents
+    WithEvents,
+    WithColumnFormatting
 {
     protected string $mode; // admin | koordinator
     protected ?int $koordinatorId;
@@ -53,6 +56,7 @@ class RelawanExport implements
         }
 
         return $query->get()->map(function ($relawan) {
+
             // ================= ADMIN =================
             if ($this->mode === 'admin') {
                 return [
@@ -60,6 +64,7 @@ class RelawanExport implements
                     $relawan->nama,
                     $relawan->user->email ?? '-',
                     $relawan->user->plain_password ?? '-',
+                    (string) $relawan->no_hp ?? '-', // WAJIB STRING
                     $relawan->village->village ?? '-',
                 ];
             }
@@ -69,6 +74,7 @@ class RelawanExport implements
                 $relawan->nama,
                 $relawan->user->email ?? '-',
                 $relawan->user->plain_password ?? '-',
+                (string) $relawan->no_hp ?? '-', // WAJIB STRING
                 $relawan->village->village ?? '-',
             ];
         });
@@ -85,6 +91,7 @@ class RelawanExport implements
                 'Nama Relawan',
                 'Email',
                 'Password',
+                'No HP',
                 'Kelurahan',
             ];
         }
@@ -93,7 +100,27 @@ class RelawanExport implements
             'Nama Relawan',
             'Email',
             'Password',
+            'No HP',
             'Kelurahan',
+        ];
+    }
+
+    /* =======================
+        COLUMN FORMAT
+        (INI KUNCI UTAMA)
+    ======================= */
+    public function columnFormats(): array
+    {
+        // ADMIN → No HP kolom E
+        if ($this->mode === 'admin') {
+            return [
+                'E' => NumberFormat::FORMAT_TEXT,
+            ];
+        }
+
+        // KOORDINATOR → No HP kolom D
+        return [
+            'D' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -107,14 +134,14 @@ class RelawanExport implements
 
                 // HEADER BOLD
                 $headerRow = $this->mode === 'koordinator' ? 3 : 1;
-                $lastCol   = $this->mode === 'admin' ? 'E' : 'D';
+                $lastCol   = $this->mode === 'admin' ? 'F' : 'E';
 
                 $event->sheet
                     ->getStyle("A{$headerRow}:{$lastCol}{$headerRow}")
                     ->getFont()
                     ->setBold(true);
 
-                // INFO KOORDINATOR (KHUSUS KOORDINATOR)
+                // INFO KOORDINATOR
                 if ($this->mode === 'koordinator') {
                     $event->sheet->setCellValue('A1', 'Koordinator');
                     $event->sheet->setCellValue('B1', $this->namaKoordinator);

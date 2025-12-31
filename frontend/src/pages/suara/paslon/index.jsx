@@ -9,7 +9,7 @@ import {
   Legend,
 } from "chart.js";
 import api from "../../../lib/axios";
-import KelurahanMap from "./mapPaslon";
+import PetaSuaraMap  from "./mapPaslon";
 import { createPortal } from "react-dom";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
@@ -34,6 +34,7 @@ export default function PaslonIndex() {
   const [geoCity, setGeoCity] = useState(null);
   const [geoVillage, setGeoVillage] = useState(null);
   const [geoSeribu, setGeoSeribu] = useState(null);
+  const [geoDistrict, setGeoDistrict] = useState(null);
 
   /* LOAD CITIES */
   useEffect(() => {
@@ -90,28 +91,24 @@ export default function PaslonIndex() {
   };
 
   /* GEOJSON */
-  useEffect(() => {
-    // fetch("/data/id31_dki_jakarta.geojson").then(r => r.json()).then(setGeoCity);
-    fetch("/data/id31_dki_jakarta_village.geojson").then(r => r.json()).then(setGeoVillage);
-    // fetch("/data/id31_dki_jakarta_kepseribu.geojson").then(r => r.json()).then(setGeoSeribu);
-  }, []);
-
-  useEffect(() => {
-    api.get("/peta/paslon").then(res => setPetaData(res.data.data || []));
-  }, []);
-
-  const suaraKelurahan = useMemo(() => {
-    const o = {};
-    petaData.forEach(d => {
-      if (!d.village || !d.suara) return;
-      o[normalize(d.village)] = d.suara;
-    });
-    return o;
-  }, [petaData]);
+useEffect(() => {
+  Promise.all([
+    fetch("/data/id31_dki_jakarta.geojson").then(r => r.json()),
+    fetch("/data/district.geojson").then(r => r.json()),
+    fetch("/data/id31_dki_jakarta_village.geojson").then(r => r.json()),
+  ]).then(([city, district, village, seribu]) => {
+    setGeoCity(city);
+    setGeoDistrict(district);
+    setGeoVillage(village);
+    setGeoSeribu(seribu);
+  });
+}, []);
 
 const isMapReady =
-  geoVillage && Object.keys(suaraKelurahan).length > 0;
-
+  geoCity &&
+  geoDistrict &&
+  geoVillage &&
+  geoCity.features?.length > 0;
 
   return (
     <div className="space-y-4">
@@ -181,9 +178,12 @@ const isMapReady =
 
           <div className="h-[420px]">
             {isMapReady && (
-              <KelurahanMap
+              <PetaSuaraMap
+                apiBase={import.meta.env.VITE_API_URL}
+                geoCity={geoCity}
+                geoDistrict={geoDistrict}
                 geoVillage={geoVillage}
-                suaraKelurahan={suaraKelurahan}
+                geoSeribu={geoSeribu}
               />
             )}
           </div>

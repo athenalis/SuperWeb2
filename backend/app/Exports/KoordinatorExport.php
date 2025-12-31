@@ -21,6 +21,7 @@ class KoordinatorExport implements FromCollection, WithHeadings, ShouldAutoSize,
                     'nama_koordinator' => $koor->nama,
                     'email' => $koor->user->email,
                     'password' => $koor->user->plain_password,
+                    'no_hp' => $koor->no_hp,
                     'kelurahan' => $koor->village?->village,
                 ];
             })
@@ -29,7 +30,7 @@ class KoordinatorExport implements FromCollection, WithHeadings, ShouldAutoSize,
 
     public function headings(): array
     {
-        return ['Nama', 'Email', 'Password', 'Kelurahan'];
+        return ['Nama', 'Email', 'Password', 'No HP', 'Kelurahan'];
     }
 
     public function registerEvents(): array
@@ -37,10 +38,10 @@ class KoordinatorExport implements FromCollection, WithHeadings, ShouldAutoSize,
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 // HEADER BOLD
-                $event->sheet->getStyle('A1:D1')->getFont()->setBold(true);
+                $event->sheet->getStyle('A1:E1')->getFont()->setBold(true);
                 
                 // Optional: wrap text
-                $event->sheet->getStyle('A:D')->getAlignment()->setWrapText(true);
+                $event->sheet->getStyle('A:E')->getAlignment()->setWrapText(true);
             },
         ];
     }
