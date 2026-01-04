@@ -39,6 +39,7 @@ export default function Koordinator() {
     village_code: "",
     tps: "",
   });
+  const [search, setSearch] = useState(""); 
 
   const [activeFilters, setActiveFilters] = useState({});
 
@@ -68,56 +69,33 @@ export default function Koordinator() {
   // ================= FETCH =================
   const fetchKoordinators = async () => {
     const res = await api.get("/koordinator", {
-      params: activeFilters,
+      params: {
+        page,
+        per_page: perPage,
+        search: search || undefined,
+        city_code: filters.city_code || undefined,
+        district_code: filters.district_code || undefined,
+        village_code: filters.village_code || undefined,
+      },
     });
+
     return res.data.data;
   };
 
-  const {
-    data: koordinators = [],
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
-    queryKey: ["koordinators", activeFilters],
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["koordinators", page, perPage, search, filters],
     queryFn: fetchKoordinators,
+    keepPreviousData: true,
   });
 
   // reset page saat data berubah
   useEffect(() => {
     setPage(1);
-  }, [perPage, koordinators, filters.nama, filters.nik, filters.tps]);
+  }, [perPage, search, filters]);
 
-  const matchNama = (nama, keyword) => {
-    if (!keyword) return true;
-    return nama.toLowerCase().includes(keyword.toLowerCase().trim());
-  };
+  const totalPage = data?.last_page ?? 1;
 
-  const matchNik = (nik, keyword) => {
-    if (!keyword) return true;
-    return String(nik).includes(keyword.trim());
-  };
-
-  const matchTps = (tps, keyword) => {
-    if (!keyword) return true;
-    const normalize = (val) => String(val).replace(/^0+/, "");
-    return normalize(tps) === normalize(keyword);
-  };
-
-  const semanticFiltered = koordinators.filter((item) => {
-    return (
-      matchNama(item.nama ?? "", filters.nama) &&
-      matchNik(item.nik ?? "", filters.nik) &&
-      matchTps(item.tps ?? "", filters.tps)
-    );
-  });
-
-  const totalPage = Math.ceil(semanticFiltered.length / perPage);
-
-  const paginatedData = semanticFiltered.slice(
-    (page - 1) * perPage,
-    page * perPage
-  );
+  const paginatedData = data?.data ?? [];
 
   const pages = Array.from({ length: totalPage }, (_, i) => i + 1);
 
@@ -126,19 +104,21 @@ export default function Koordinator() {
     setActiveFilters(filters);
   };
 
-  const resetFilter = () => {
-    setFilters({
-      nik: "",
-      nama: "",
-      city_code: "",
-      district_code: "",
-      village_code: "",
-      tps: "",
-    });
-    setActiveFilters({});
-    setDistricts([]);
-    setVillages([]);
-  };
+const resetFilter = () => {
+  setSearch("");
+  setFilters({
+    nik: "",
+    nama: "",
+    city_code: "",
+    district_code: "",
+    village_code: "",
+    tps: "",
+  });
+  setActiveFilters({});
+  setDistricts([]);
+  setVillages([]);
+};
+
 
   // ================= EXPORT =================
 const exportAllKoordinators = async () => {
@@ -290,17 +270,10 @@ return (
 
       <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
         <input
-          className="border border-gray-400 px-5 py-3 rounded-lg"
-          placeholder="Cari NIK..."
-          value={filters.nik}
-          onChange={(e) => setFilters({ ...filters, nik: e.target.value })}
-        />
-
-        <input
-          className="border border-gray-400 px-5 py-3 rounded-lg"
-          placeholder="Cari Nama..."
-          value={filters.nama}
-          onChange={(e) => setFilters({ ...filters, nama: e.target.value })}
+          className="border border-gray-400 px-5 py-3 rounded-lg md:col-span-2"
+          placeholder="Cari nama / NIK / no HP / TPS / wilayah"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
 
         <div className="relative">
@@ -387,12 +360,6 @@ return (
           </select>
         </div>
 
-        <input
-          className="border border-gray-400 px-5 py-3 rounded-lg"
-          placeholder="Cari TPS..."
-          value={filters.tps}
-          onChange={(e) => setFilters({ ...filters, tps: e.target.value })}
-        />
       </div>
 
       <div className="flex justify-end gap-3">
@@ -463,6 +430,22 @@ return (
             <tr>
               <td colSpan="7" className="py-6 text-center text-red-600">
                 Gagal memuat data
+              </td>
+            </tr>
+          )}
+
+            {/* === EMPTY STATE === */}
+          {!isLoading && !isError && paginatedData.length === 0 && (
+            <tr>
+              <td colSpan="7" className="py-12 text-center">
+                <div className="flex flex-col items-center gap-2 text-slate-500">
+                  <div className="text-lg font-medium text-slate-700">
+                    Data tidak ditemukan
+                  </div>
+                  <div className="text-sm">
+                    Coba ubah kata kunci pencarian atau filter wilayah
+                  </div>
+                </div>
               </td>
             </tr>
           )}

@@ -48,6 +48,8 @@ export default function Relawan() {
     tps: "",
   });
 
+  const [search, setSearch] = useState("");
+
   // FILTER YANG DIKIRIM KE API
   const [activeFilters, setActiveFilters] = useState({});
 
@@ -73,56 +75,34 @@ export default function Relawan() {
   // =====================
   // FETCH RELAWAN
   // =====================
-  const fetchRelawan = async () => {
-    const res = await api.get("/relawan", {
-      params: activeFilters,
-    });
-    return res.data.data;
-  };
-
-  const {
-    data: relawan = [],
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ["relawan", activeFilters],
-    queryFn: fetchRelawan,
+const fetchRelawan = async () => {
+  const res = await api.get("/relawan", {
+    params: {
+      page,
+      per_page: perPage,
+      search: search || undefined,
+      city_code: filters.city_code || undefined,
+      district_code: filters.district_code || undefined,
+      village_code: filters.village_code || undefined,
+    },
   });
 
-  useEffect(() => {
-    setPage(1);
-  }, [perPage, relawan, filters.nama, filters.nik, filters.tps]);
+  return res.data.data;
+};
 
-  const matchNama = (nama, keyword) => {
-    if (!keyword) return true;
-    return nama.toLowerCase().includes(keyword.toLowerCase().trim());
-  };
+const { data, isLoading, isError } = useQuery({
+  queryKey: ["relawan", page, perPage, search, filters],
+  queryFn: fetchRelawan,
+  keepPreviousData: true,
+});
 
-  const matchNik = (nik, keyword) => {
-    if (!keyword) return true;
-    return String(nik).includes(keyword.trim());
-  };
 
-  const matchTps = (tps, keyword) => {
-    if (!keyword) return true;
-    const normalize = (val) => String(val).replace(/^0+/, "");
-    return normalize(tps) === normalize(keyword);
-  };
+useEffect(() => {
+  setPage(1);
+}, [perPage, search, filters.city_code, filters.district_code, filters.village_code]);
 
-  const semanticFiltered = relawan.filter((item) => {
-    return (
-      matchNama(item.nama ?? "", filters.nama) &&
-      matchNik(item.nik ?? "", filters.nik) &&
-      matchTps(item.tps ?? "", filters.tps)
-    );
-  });
-
-  const totalPage = Math.ceil(semanticFiltered.length / perPage);
-
-  const paginatedData = semanticFiltered.slice(
-    (page - 1) * perPage,
-    page * perPage
-  );
+  const paginatedData = data?.data ?? [];
+  const totalPage = data?.last_page ?? 1;
 
   const pages = Array.from({ length: totalPage }, (_, i) => i + 1);
 
@@ -134,6 +114,7 @@ export default function Relawan() {
   };
 
   const resetFilter = () => {
+    setSearch("");
     setFilters({
       nik: "",
       nama: "",
@@ -333,17 +314,10 @@ export default function Relawan() {
         {/* FILTER INPUT — ADMIN BOLEH */}
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
           <input
-            className="border border-gray-400 px-5 py-3 rounded-lg"
-            placeholder="Cari NIK..."
-            value={filters.nik}
-            onChange={(e) => setFilters({ ...filters, nik: e.target.value })}
-          />
-
-          <input
-            className="border border-gray-400 px-5 py-3 rounded-lg"
-            placeholder="Cari Nama..."
-            value={filters.nama}
-            onChange={(e) => setFilters({ ...filters, nama: e.target.value })}
+            className="border px-5 py-3 rounded-lg md:col-span-2"
+            placeholder="Cari nama / NIK / no HP / TPS / wilayah"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
 
           {/* KOTA */}
@@ -405,13 +379,6 @@ export default function Relawan() {
               ))}
             </select>
           </div>
-
-          <input
-            className="border border-gray-400 px-5 py-3 rounded-lg"
-            placeholder="Cari TPS..."
-            value={filters.tps}
-            onChange={(e) => setFilters({ ...filters, tps: e.target.value })}
-          />
         </div>
 
         <div className="flex justify-end gap-3">

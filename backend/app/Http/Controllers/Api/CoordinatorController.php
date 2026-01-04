@@ -25,6 +25,8 @@ class CoordinatorController extends Controller
 {
     public function index(Request $request)
     {
+        $perPage = (int) ($request->per_page ?? 5);
+
         $query = Coordinator::with([
             'province:province_code,province',
             'city:city_code,city',
@@ -32,53 +34,47 @@ class CoordinatorController extends Controller
             'village:village_code,village',
         ])->withCount('relawans');
 
-        if ($request->city_code) {
+        // GLOBAL SEARCH
+        if ($request->filled('search')) {
+            $keyword = $request->search;
+
+            $query->where(function ($q) use ($keyword) {
+                $q->where('nama', 'like', "%{$keyword}%")
+                ->orWhere('nik', 'like', "%{$keyword}%")
+                ->orWhere('no_hp', 'like', "%{$keyword}%")
+                ->orWhere('tps', 'like', "%{$keyword}%")
+
+                ->orWhereHas('province', function ($qq) use ($keyword) {
+                    $qq->where('province', 'like', "%{$keyword}%");
+                })
+                ->orWhereHas('city', function ($qq) use ($keyword) {
+                    $qq->where('city', 'like', "%{$keyword}%");
+                })
+                ->orWhereHas('district', function ($qq) use ($keyword) {
+                    $qq->where('district', 'like', "%{$keyword}%");
+                })
+                ->orWhereHas('village', function ($qq) use ($keyword) {
+                    $qq->where('village', 'like', "%{$keyword}%");
+                });
+            });
+        }
+
+        // FILTER WILAYAH
+        if ($request->filled('city_code')) {
             $query->where('city_code', $request->city_code);
         }
-
-        if ($request->district_code) {
+        if ($request->filled('district_code')) {
             $query->where('district_code', $request->district_code);
         }
-
-        if ($request->village_code) {
+        if ($request->filled('village_code')) {
             $query->where('village_code', $request->village_code);
         }
 
-        if ($request->nama) {
-            $query->where('nama', 'like', '%' . $request->nama . '%');
-        }
-
-        if ($request->nik) {
-            $query->where('nik', 'like', '%' . $request->nik . '%');
-        }
-
-        if ($request->tps) {
-            $query->where('tps', 'like', '%' . $request->tps . '%');
-        }
-
-        $koordinators = $query->get();
-
-        $isSearch =
-            $request->filled('nama') ||
-            $request->filled('nik') ||
-            $request->filled('tps') ||
-            $request->filled('city_code') ||
-            $request->filled('district_code') ||
-            $request->filled('village_code');
-
-        if ($koordinators->isEmpty()) {
-            return response()->json([
-                'status'  => true,
-                'message' => $isSearch
-                    ? 'Data koordinator tidak ditemukan'
-                    : 'Belum ada data koordinator',
-                'data'    => []
-            ]);
-        }
+        $data = $query->orderByDesc('id')->paginate($perPage);
 
         return response()->json([
             'status' => true,
-            'data' => $koordinators
+            'data' => $data
         ]);
     }
 

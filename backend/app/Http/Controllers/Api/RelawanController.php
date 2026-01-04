@@ -23,67 +23,67 @@ class RelawanController extends Controller
 {
 
     public function index(Request $request)
-    {
-        $user = Auth::user();
+{
+    $user = Auth::user();
+    $perPage = (int) ($request->per_page ?? 5);
 
-        $query = Relawan::with([
-            'province:province_code,province',
-            'city:city_code,city',
-            'district:district_code,district',
-            'village:village_code,village',
-            'koordinator:id,nama'
-        ])->withCount('visitForms');;
+    $query = Relawan::with([
+        'province:province_code,province',
+        'city:city_code,city',
+        'district:district_code,district',
+        'village:village_code,village',
+        'koordinator:id,nama',
+    ])->withCount('visitForms');
 
-        if ($user->role === 'koordinator') {
-            if (!$user->koordinator) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Akun koordinator belum terdaftar'
-                ], 403);
-            }
-
-            $query->where('koordinator_id', $user->koordinator->id);
-        }
-
-        if ($request->city_code) {
-            $query->where('city_code', $request->city_code);
-        }
-
-        if ($request->district_code) {
-            $query->where('district_code', $request->district_code);
-        }
-
-        if ($request->village_code) {
-            $query->where('village_code', $request->village_code);
-        }
-
-        if ($request->nama) {
-            $query->where('nama', 'like', '%' . $request->nama . '%');
-        }
-
-        if ($request->nik) {
-            $query->where('nik', 'like', '%' . $request->nik . '%');
-        }
-
-        if ($request->tps) {
-            $query->where('tps', $request->tps);
-        }
-
-        $relawans = $query->get();
-
-        if ($relawans->isEmpty()) {
+    // 🔐 BATAS KOORDINATOR
+    if ($user->role === 'koordinator') {
+        if (!$user->koordinator) {
             return response()->json([
-                'status'  => true,
-                'message' => 'Belum ada data relawan',
-                'data'    => []
-            ]);
+                'status' => false,
+                'message' => 'Akun koordinator belum terdaftar'
+            ], 403);
         }
 
-        return response()->json([
-            'status' => true,
-            'data'   => $relawans
-        ]);
+        $query->where('koordinator_id', $user->koordinator->id);
     }
+
+    // 🔍 GLOBAL SEARCH (SATU INPUT)
+    if ($request->filled('search')) {
+        $keyword = $request->search;
+
+        $query->where(function ($q) use ($keyword) {
+            $q->where('nama', 'like', "%{$keyword}%")
+              ->orWhere('nik', 'like', "%{$keyword}%")
+              ->orWhere('no_hp', 'like', "%{$keyword}%")
+              ->orWhere('tps', 'like', "%{$keyword}%")
+              ->orWhereHas('province', fn ($qq) => $qq->where('province', 'like', "%{$keyword}%"))
+              ->orWhereHas('city', fn ($qq) => $qq->where('city', 'like', "%{$keyword}%"))
+              ->orWhereHas('district', fn ($qq) => $qq->where('district', 'like', "%{$keyword}%"))
+              ->orWhereHas('village', fn ($qq) => $qq->where('village', 'like', "%{$keyword}%"))
+              ->orWhereHas('koordinator', fn ($qq) => $qq->where('nama', 'like', "%{$keyword}%"));
+        });
+    }
+
+    // 🌍 FILTER WILAYAH
+    if ($request->filled('city_code')) {
+        $query->where('city_code', $request->city_code);
+    }
+    if ($request->filled('district_code')) {
+        $query->where('district_code', $request->district_code);
+    }
+    if ($request->filled('village_code')) {
+        $query->where('village_code', $request->village_code);
+    }
+
+    $data = $query
+        ->orderByDesc('id')
+        ->paginate($perPage);
+
+    return response()->json([
+        'status' => true,
+        'data' => $data
+    ]);
+}
 
     public function show($id)
     {
