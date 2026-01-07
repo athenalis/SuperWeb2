@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "react-hot-toast";
 import api from "../../lib/axios";
 import { Icon } from "@iconify/react";
 
@@ -9,6 +11,7 @@ const maxDate17 = () => {
 };
 
 export default function CreateKunjungan() {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [kunjunganId, setKunjunganId] = useState(null);
   const [address, setAddress] = useState("");
@@ -30,7 +33,14 @@ export default function CreateKunjungan() {
           <div className="p-5 md:p-8">
             {step === 1 && <Step1 onNext={(id, addr) => { setKunjunganId(id); setAddress(addr); setStep(2); }} />}
             {step === 2 && <Step2 kunjunganId={kunjunganId} address={address} onNext={() => setStep(3)} onBack={() => setStep(1)} />}
-            {step === 3 && <Step3 kunjunganId={kunjunganId} onBack={() => setStep(2)} onComplete={() => setStep(4)} />}
+            {step === 3 && <Step3 kunjunganId={kunjunganId} onBack={() => setStep(2)} onComplete={() => {
+              if (window.innerWidth < 1024) {
+                toast.success("✅ Kunjungan berhasil dibuat!");
+                navigate(`/kunjungan`);
+              } else {
+                setStep(4);
+              }
+            }} />}
             {step === 4 && <StepComplete />}
           </div>
         </div>
@@ -48,158 +58,214 @@ function Stepper({ step }) {
 
   return (
     <div className="relative max-w-3xl mx-auto">
-    <div className="absolute top-1/2 left-0 right-0 h-1 -translate-y-1/2 bg-gray-200">
-      <div
-        className="h-full bg-blue-600 transition-all duration-500"
-        style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}
-      />
-    </div>
+      <div className="absolute top-1/2 left-0 right-0 h-1 -translate-y-1/2 bg-gray-200">
+        <div
+          className="h-full bg-blue-600 transition-all duration-500"
+          style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}
+        />
+      </div>
 
       <div className="relative grid grid-cols-3">
-{steps.map((s) => (
-  <div
-    key={s.num}
-    className="flex flex-col items-center text-center"
-  >
-    <div
-      className={`
+        {steps.map((s) => (
+          <div
+            key={s.num}
+            className="flex flex-col items-center text-center"
+          >
+            <div
+              className={`
         w-11 h-11 md:w-12 md:h-12
         rounded-full flex items-center justify-center
         text-base md:text-lg font-bold
         border-4 border-white transition-all
         ${step >= s.num
-          ? "bg-blue-600 text-white shadow-lg"
-          : "bg-gray-200 text-gray-500"}
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "bg-gray-200 text-gray-500"}
       `}
-    >
-      {s.icon}
-    </div>
+            >
+              {s.icon}
+            </div>
 
-    <span
-      className={`
+            <span
+              className={`
         mt-3 text-xs md:text-sm font-semibold
         ${step >= s.num ? "text-blue-600" : "text-gray-400"}
       `}
-    >
-      {s.label}
-    </span>
-  </div>
-))}
+            >
+              {s.label}
+            </span>
+          </div>
+        ))}
 
       </div>
     </div>
   );
 }
 
+const compressImage = (file, maxWidth = 800, quality = 0.6) => {
+  return new Promise((resolve) => {
+    // If file is small enough, skip compression
+    if (file.size < 500 * 1024) { // < 500KB - skip compression
+      resolve(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = (maxWidth / width) * height;
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            resolve(new File([blob], file.name, { type: "image/jpeg" }));
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+    };
+  });
+};
+
 function Step1({ onNext }) {
   const [form, setForm] = useState({
     nama: "", nik: "", tanggal: "", pendidikan: "", pekerjaan: "", penghasilan: "",
     fotoKtp: null, alamat: "", latitude: "", longitude: ""
   });
+  const [previewUrl, setPreviewUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingGps, setLoadingGps] = useState(false);
-  const [error, setError] = useState("");
   const [gpsStatus, setGpsStatus] = useState("");
-  const [previewUrl, setPreviewUrl] = useState("");
+  const [error, setError] = useState("");
   const [pekerjaanList, setPekerjaanList] = useState([]);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
 
   useEffect(() => {
-    getLocationAndAddress();
+    // Load persisted data
+    const saved = localStorage.getItem("kunjungan_draft_step1");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setForm(prev => ({ ...prev, ...parsed }));
+        // Jika sudah ada alamat dari draft, tidak perlu ambil GPS lagi
+        if (parsed.alamat && parsed.alamat.length > 10) {
+          fetchPekerjaan();
+          return;
+        }
+      } catch (e) {
+        console.error("Failed to parse draft step 1");
+      }
+    }
+
     fetchPekerjaan();
+
+    // Auto fetch GPS dinyalakan kembali
+    // getLocationAndAddress();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Save to localstorage on change
+  useEffect(() => {
+    // Avoid saving empty init state if verified
+    if (form.nama || form.nik) {
+      localStorage.setItem("kunjungan_draft_step1", JSON.stringify(form));
+    }
+  }, [form]);
+
   const fetchPekerjaan = async () => {
+    // Fallback data jika API gagal
+    const fallbackPekerjaan = [
+      "Belum / Tidak Bekerja",
+      "Pelajar / Mahasiswa",
+      "PNS / ASN",
+      "TNI / POLRI",
+      "Karyawan Swasta",
+      "Wiraswasta",
+      "Petani / Nelayan",
+      "Buruh",
+      "Pedagang",
+      "Ibu Rumah Tangga",
+      "Pensiunan",
+      "Lainnya"
+    ];
+
     try {
       const res = await api.get("/wilayah/pekerjaan");
-      // Map pekerjaan data to just strings if they are objects, or adjust Select component
-      // Assuming response is array of objects {id, nama}
-      const p = res.data.map(item => item.nama);
-      setPekerjaanList(p);
+      if (res.data && res.data.length > 0) {
+        setPekerjaanList(res.data.map(item => item.nama));
+      } else {
+        setPekerjaanList(fallbackPekerjaan);
+      }
     } catch (err) {
-      console.error("Failed to fetch pekerjaan", err);
+      console.error("Failed to fetch pekerjaan, using fallback", err);
+      setPekerjaanList(fallbackPekerjaan);
+    }
+  };
+
+  const reverseGeocode = async (lat, lon) => {
+    try {
+      setGpsStatus("Menerjemahkan alamat...");
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      const data = await res.json();
+      if (data.display_name) {
+        setForm(prev => ({ ...prev, alamat: data.display_name }));
+      }
+    } catch (err) {
+      console.error("Geocoding error:", err);
     }
   };
 
   const getLocationAndAddress = () => {
     if (!navigator.geolocation) {
-      setGpsStatus("failed");
       setError("Browser tidak mendukung GPS");
       return;
     }
 
     setLoadingGps(true);
-    setGpsStatus("loading");
-    setError("");
+    setGpsStatus("Mencari lokasi...");
 
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude.toFixed(6);
-        const lon = position.coords.longitude.toFixed(6);
-
-        setForm(prev => ({ ...prev, latitude: lat, longitude: lon }));
-
-        try {
-          const address = await reverseGeocode(lat, lon);
-          if (address) {
-            setForm(prev => ({ ...prev, alamat: address }));
-            setGpsStatus("success");
-          } else {
-            setGpsStatus("failed");
-            setError("Gagal mendapatkan alamat dari GPS. Silakan isi manual.");
-          }
-        } catch {
-          setGpsStatus("failed");
-          setError("Gagal mendapatkan alamat dari GPS. Silakan isi manual.");
-        } finally {
-          setLoadingGps(false);
-        }
-      },
-      (error) => {
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setForm(prev => ({ ...prev, latitude, longitude }));
+        reverseGeocode(latitude, longitude);
         setLoadingGps(false);
-        setGpsStatus("failed");
-        let errorMsg = "GPS Error: ";
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMsg += "Izin akses lokasi ditolak. Aktifkan GPS dan berikan izin.";
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMsg += "Lokasi tidak tersedia. Pastikan GPS aktif.";
-            break;
-          case error.TIMEOUT:
-            errorMsg += "Waktu tunggu habis. Coba lagi.";
-            break;
-          default:
-            errorMsg += error.message;
-        }
-        setError(errorMsg);
+        setGpsStatus("✓ Lokasi terbaca");
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
-      }
+      (err) => {
+        console.error("GPS Error:", err);
+        setLoadingGps(false);
+        setGpsStatus("");
+        if (err.code === 1) {
+          setShowPermissionModal(true);
+          setGpsStatus("");
+          setError(""); // Ensure red alert is gone
+        } else {
+          setError("Gagal mengambil lokasi. Pastikan GPS aktif.");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
-  const reverseGeocode = async (lat, lon) => {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=18&addressdetails=1`;
-
-    try {
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'KunjunganApp/1.0' }
-      });
-
-      if (!response.ok) {
-        throw new Error('Reverse geocode failed');
-      }
-
-      const data = await response.json();
-      return data?.display_name || null;
-    } catch (error) {
-      console.error('Reverse geocode error:', error);
-      return null;
-    }
+  const handleRefreshGps = () => {
+    setError("");
+    setShowPermissionModal(false);
+    getLocationAndAddress();
   };
 
   const handleFotoChange = (e) => {
@@ -223,11 +289,6 @@ function Step1({ onNext }) {
     setError("");
   };
 
-  const handleRefreshGps = () => {
-    setError("");
-    getLocationAndAddress();
-  };
-
   const handleSubmit = async () => {
     if (!isValid) {
       setError("Mohon lengkapi semua field yang wajib diisi");
@@ -237,6 +298,8 @@ function Step1({ onNext }) {
     setError("");
     setLoading(true);
 
+    const compressedFoto = await compressImage(form.fotoKtp);
+
     try {
       const fd = new FormData();
       fd.append("nama", form.nama);
@@ -245,10 +308,10 @@ function Step1({ onNext }) {
       fd.append("pendidikan", form.pendidikan);
       fd.append("pekerjaan", form.pekerjaan);
       fd.append("penghasilan", form.penghasilan);
-      fd.append("foto_ktp", form.fotoKtp);
+      fd.append("foto_ktp", compressedFoto);
       fd.append("alamat", form.alamat);
-      fd.append("latitude", form.latitude);
-      fd.append("longitude", form.longitude);
+      if (form.latitude) fd.append("latitude", form.latitude);
+      if (form.longitude) fd.append("longitude", form.longitude);
 
       // Gunakan api helper (otomatis handle token via interceptor)
       const res = await api.post("/kunjungan", fd, {
@@ -260,34 +323,51 @@ function Step1({ onNext }) {
       }
 
       // Success - proceed to next step
+      localStorage.removeItem("kunjungan_draft_step1");
+
+      if (!res.data.data?.id) {
+        throw new Error("Gagal mendapatkan ID Kunjungan dari server");
+      }
       onNext(res.data.data.id, form.alamat);
 
     } catch (err) {
       console.error("Step1 submit error:", err);
-      setError(err?.response?.data?.message || err.message || "Terjadi kesalahan saat menyimpan data");
+      console.error("Error response:", err.response?.data);
+      console.error("Error status:", err.response?.status);
+
+      if (err.response?.data?.errors) {
+        const backendErrors = Object.values(err.response.data.errors).flat().join(", ");
+        setError(`Validasi Gagal: ${backendErrors}`);
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError(err.message || "Terjadi kesalahan saat menyimpan data");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const isValid = form.nama && /^\d{16}$/.test(form.nik) && form.tanggal &&
-    form.pendidikan && form.pekerjaan && form.penghasilan &&
-    form.fotoKtp && form.alamat.length >= 10 &&
-    form.latitude && form.longitude;
+  const getValidationError = () => {
+    if (!form.nama) return "Nama Lengkap belum diisi";
+    if (!form.nik) return "NIK belum diisi";
+    if (!/^\d{16}$/.test(form.nik)) return "NIK harus berjumlah 16 digit angka";
+    if (!form.tanggal) return "Tanggal Lahir belum diisi";
+    if (!form.pendidikan) return "Pendidikan belum dipilih";
+    if (!form.pekerjaan) return "Pekerjaan belum dipilih";
+    if (!form.penghasilan) return "Penghasilan belum dipilih";
+    if (!form.fotoKtp) return "Foto KTP wajib diupload";
+    if (!form.alamat || form.alamat.length < 10) return "Alamat minimal 10 karakter";
+    return null;
+  };
+
+  const isValid = !getValidationError();
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold text-gray-800">Informasi Kepala Keluarga</h2>
 
       {error && <Alert type="error" message={error} />}
-
-      {loadingGps && (
-        <Alert type="info" message="Mengambil lokasi GPS dan alamat..." loading={true} />
-      )}
-
-      {gpsStatus === "success" && (
-        <Alert type="success" message="✓ Lokasi dan alamat berhasil didapatkan dari GPS" />
-      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Input label="Nama Lengkap" value={form.nama} onChange={(v) => setForm({ ...form, nama: v })} required />
@@ -317,7 +397,7 @@ function Step1({ onNext }) {
         >
           {!previewUrl ? (
             <div className="space-y-1 md:space-y-2 flex flex-col items-center justify-center text-center">
-              <Icon icon="mdi:camera" className="text-4xl md:text-5xl text-gray-500" /> 
+              <Icon icon="mdi:camera" className="text-4xl md:text-5xl text-gray-500" />
               <p className="text-gray-600 font-medium text-sm md:text-base">Klik untuk ambil/upload foto KTP</p>
               <p className="text-xs text-gray-400">Format JPG/PNG (max 5MB)</p>
             </div>
@@ -341,74 +421,40 @@ function Step1({ onNext }) {
         />
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start gap-3 mb-4">
-          <div>
-            <h3 className="font-semibold text-blue-900 flex items-center gap-1">
-              <Icon icon="mdi:map-marker" />
-              Lokasi GPS
-            </h3>
-            <p className="text-xs text-blue-700 mt-0.5">Alamat akan otomatis terisi dari GPS Anda</p>
-          </div>
-          <button
-            onClick={handleRefreshGps}
-            disabled={loadingGps}
-            className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-          {loadingGps ? (
-            <Icon icon="mdi:loading" className="animate-spin" />
-          ) : (
-            <Icon icon="mdi:refresh" />
-          )}
-          <span>Refresh Lokasi GPS</span>
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-[10px] font-bold uppercase text-blue-800 mb-1">Latitude</label>
-            <input
-              value={form.latitude || ''}
-              readOnly
-              placeholder="-6.xxxxx"
-              className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm font-mono"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] font-bold uppercase text-blue-800 mb-1">Longitude</label>
-            <input
-              value={form.longitude || ''}
-              readOnly
-              placeholder="106.xxxxx"
-              className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm font-mono"
-            />
-          </div>
-        </div>
-      </div>
+      {/* GPS section dihide - latitude/longitude tetap bisa dikirim jika ada */}
+      <input type="hidden" value={form.latitude || ""} />
+      <input type="hidden" value={form.longitude || ""} />
 
       <div>
         <label className="block font-semibold mb-2 text-sm md:text-base">
-          Alamat Lengkap (dari GPS) <span className="text-red-500">*</span>
+          Alamat Lengkap <span className="text-red-500">*</span>
         </label>
         <textarea
           value={form.alamat}
           onChange={(e) => setForm({ ...form, alamat: e.target.value })}
           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm md:text-base"
           rows={3}
-          placeholder="Alamat akan terisi otomatis dari koordinat GPS..."
-          disabled={loadingGps}
+          placeholder="Masukkan alamat lengkap..."
         />
       </div>
 
-      <div className="flex justify-end pt-4">
-        <button
-          onClick={handleSubmit}
-          disabled={!isValid || loading}
-          className="w-full md:w-auto px-8 py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition disabled:opacity-50 disabled:shadow-none"
-        >
-          {loading ? "Menyimpan..." : "Lanjut ke Anggota Keluarga →"}
-        </button>
+      <div className="pt-2">
+        {!isValid && (
+          <p className="text-xs text-red-500 text-right mb-2 font-medium italic">
+            * {getValidationError()}
+          </p>
+        )}
+        <div className="flex justify-end">
+          <button
+            onClick={handleSubmit}
+            disabled={!isValid || loading}
+            className="w-full md:w-auto px-8 py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition disabled:opacity-50 disabled:shadow-none"
+          >
+            {loading ? "Menyimpan..." : "Lanjut ke Anggota Keluarga →"}
+          </button>
+        </div>
       </div>
+      {showPermissionModal && <PermissionModal onRetry={handleRefreshGps} loading={loadingGps} />}
     </div>
   );
 }
@@ -424,14 +470,50 @@ function Step2({ kunjunganId, onNext, onBack }) {
   }, []);
 
   const fetchPekerjaan = async () => {
+    // Fallback data jika API gagal
+    const fallbackPekerjaan = [
+      "Belum / Tidak Bekerja",
+      "Pelajar / Mahasiswa",
+      "PNS / ASN",
+      "TNI / POLRI",
+      "Karyawan Swasta",
+      "Wiraswasta",
+      "Petani / Nelayan",
+      "Buruh",
+      "Pedagang",
+      "Ibu Rumah Tangga",
+      "Pensiunan",
+      "Lainnya"
+    ];
+
     try {
       const res = await api.get("/wilayah/pekerjaan");
-      const p = res.data.map(item => item.nama);
-      setPekerjaanList(p);
+      if (res.data && res.data.length > 0) {
+        const p = res.data.map(item => item.nama);
+        setPekerjaanList(p);
+      } else {
+        setPekerjaanList(fallbackPekerjaan);
+      }
     } catch (err) {
-      console.error("Failed to fetch pekerjaan", err);
+      console.error("Failed to fetch pekerjaan, using fallback", err);
+      setPekerjaanList(fallbackPekerjaan);
     }
   };
+
+  useEffect(() => {
+    const saved = localStorage.getItem("kunjungan_draft_members");
+    if (saved) {
+      try {
+        setMembers(JSON.parse(saved));
+      } catch (e) { }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (members.length > 0) {
+      localStorage.setItem("kunjungan_draft_members", JSON.stringify(members));
+    }
+  }, [members]);
 
   const addMember = () => {
     setMembers([...members, {
@@ -457,6 +539,11 @@ function Step2({ kunjunganId, onNext, onBack }) {
   };
 
   const handleSubmit = async () => {
+    if (!kunjunganId) {
+      setError("ID Kunjungan tidak ditemukan. Silakan kembali ke tahap sebelumnya.");
+      return;
+    }
+
     setError("");
     setLoading(true);
 
@@ -467,11 +554,20 @@ function Step2({ kunjunganId, onNext, onBack }) {
       return;
     }
 
-    const invalidMembers = members.filter(m => !m.nama || !m.hubungan || !m.tanggalLahir || !m.pendidikan || !m.penghasilan);
+    const invalidMembers = members.filter(m => {
+      // Validasi field wajib termasuk NIK
+      if (!m.nama || !m.nik || !m.hubungan || !m.tanggalLahir || !m.pendidikan || !m.penghasilan) return true;
+      // Validasi NIK harus 16 digit
+      if (!/^\d{16}$/.test(m.nik)) return true;
+      return false;
+    });
+
     if (invalidMembers.length > 0) {
       const missingFields = [];
       const m = invalidMembers[0];
       if (!m.nama) missingFields.push("Nama");
+      if (!m.nik) missingFields.push("NIK");
+      if (m.nik && !/^\d{16}$/.test(m.nik)) missingFields.push("NIK harus 16 digit");
       if (!m.hubungan) missingFields.push("Hubungan");
       if (!m.tanggalLahir) missingFields.push("Tanggal Lahir");
       if (!m.pendidikan) missingFields.push("Pendidikan");
@@ -496,7 +592,8 @@ function Step2({ kunjunganId, onNext, onBack }) {
         fd.append("pendidikan", member.pendidikan);
         fd.append("penghasilan", member.penghasilan);
         if (member.fotoKtp instanceof File) {
-          fd.append("foto_ktp", member.fotoKtp);
+          const compressedFoto = await compressImage(member.fotoKtp);
+          fd.append("foto_ktp", compressedFoto);
         }
 
         const res = await api.post(`/kunjungan/${kunjunganId}/anggota`, fd);
@@ -506,6 +603,7 @@ function Step2({ kunjunganId, onNext, onBack }) {
         }
       }
 
+      localStorage.removeItem("kunjungan_draft_members");
       onNext();
     } catch (err) {
       console.error("Step2 submit error:", err);
@@ -522,7 +620,13 @@ function Step2({ kunjunganId, onNext, onBack }) {
     }
   };
 
-  const isValid = members.length === 0 || members.every(m => m.nama && /^\d{16}$/.test(m.nik) && m.hubungan && m.tanggalLahir && m.pendidikan && m.penghasilan);
+  const isValid = members.length === 0 || members.every(m => {
+    // Field wajib termasuk NIK
+    if (!m.nama || !m.nik || !m.hubungan || !m.tanggalLahir || !m.pendidikan || !m.penghasilan) return false;
+    // NIK harus 16 digit
+    if (!/^\d{16}$/.test(m.nik)) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -557,7 +661,14 @@ function Step2({ kunjunganId, onNext, onBack }) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-4">
               <Input label="Nama Lengkap" value={member.nama} onChange={(v) => updateMember(member.id, "nama", v)} required />
-              <Input label="NIK" value={member.nik} onChange={(v) => updateMember(member.id, "nik", v)} required maxLength={16} placeholder="16 digit NIK" />
+              <Input
+                label="NIK"
+                value={member.nik}
+                onChange={(v) => /^\d{0,16}$/.test(v) && updateMember(member.id, "nik", v)}
+                required
+                maxLength={16}
+                placeholder="16 digit NIK"
+              />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Select label="Hubungan" value={member.hubungan} onChange={(v) => updateMember(member.id, "hubungan", v)}
@@ -657,17 +768,29 @@ function Step3({ kunjunganId, onBack, onComplete }) {
   };
 
   const handleSubmit = async () => {
-  const isComplete = Object.entries(answers).every(([key, val]) => {
-    if (key === "harapan") {
-      return typeof val === "string" && val.trim().length >= 5;
-    }
-    return val !== 0 && val !== null;
-  });
+    // Validasi setiap jawaban
+    const missingAnswers = [];
 
-   if (!isComplete) {
-    setError("Mohon lengkapi semua jawaban kuisioner");
-    return;
-  }
+    if (answers.tau_paslon === 0) missingAnswers.push("Mengenal pasangan calon");
+    if (answers.tau_informasi === 0) missingAnswers.push("Informasi pemilihan");
+    if (answers.tau_visi_misi === 0) missingAnswers.push("Visi dan misi");
+    if (answers.tau_program_kerja === 0) missingAnswers.push("Program kerja");
+    if (answers.tau_rekam_jejak === 0) missingAnswers.push("Rekam jejak");
+    if (answers.pernah_dikunjungi === null) missingAnswers.push("Pernah dikunjungi");
+    if (answers.percaya === 0) missingAnswers.push("Kepercayaan");
+    if (!answers.harapan || answers.harapan.trim().length < 3) missingAnswers.push(`Harapan (minimal 3 karakter, sekarang: ${answers.harapan?.trim().length || 0})`);
+    if (answers.pertimbangan === 0) missingAnswers.push("Pertimbangan");
+    if (answers.ingin_memilih === 0) missingAnswers.push("Kesediaan memilih");
+
+    if (missingAnswers.length > 0) {
+      setError(`Mohon lengkapi jawaban: ${missingAnswers.join(", ")}`);
+      return;
+    }
+
+    if (!kunjunganId) {
+      setError("ID Kunjungan tidak ditemukan. Mohon ulangi proses dari awal.");
+      return;
+    }
 
     setError("");
     setLoading(true);
@@ -744,7 +867,7 @@ function Step3({ kunjunganId, onBack, onComplete }) {
                     text-sm md:text-base resize-none
                   "
                 />
-                ):q.type === "yesno" ? (
+              ) : q.type === "yesno" ? (
                 <div className="flex gap-3 md:gap-4">
                   {["ya", "tidak"].map(opt => (
                     <button
@@ -826,8 +949,8 @@ function Input({ label, type = "text", value, onChange, required, readOnly, maxL
         disabled={disabled}
         maxLength={maxLength}
         placeholder={placeholder}
-        max={max}  
-        min={min}  
+        max={max}
+        min={min}
         className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${readOnly || disabled ? 'bg-gray-50 cursor-not-allowed' : ''
           }`}
       />
@@ -865,15 +988,72 @@ function Button({ children, onClick, disabled = false, loading = false, variant 
     <button
       onClick={onClick}
       disabled={disabled || loading}
-      className={`px-6 py-3 rounded-xl font-semibold transition ${styles[variant]} ${
-        disabled || loading ? "opacity-50 cursor-not-allowed" : ""
-      }`}
+      className={`px-6 py-3 rounded-xl font-semibold transition ${styles[variant]} ${disabled || loading ? "opacity-50 cursor-not-allowed" : ""
+        }`}
     >
       {loading && (
         <Icon icon="mdi:loading" className="inline-block animate-spin mr-2" />
       )}
       {children}
     </button>
+  );
+}
+
+
+function PermissionModal({ onRetry, loading }) {
+  return (
+    <div className="fixed inset-0 z-[50] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-all duration-300">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform scale-100 transition-all">
+        <div className="p-6 text-center">
+          <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 ring-8 ring-blue-50/50">
+            <Icon icon="mdi:map-marker-radius" width="32" />
+          </div>
+          <h3 className="text-xl font-bold text-slate-800 mb-2">Izin Lokasi Diperlukan</h3>
+          <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+            Aplikasi ini membutuhkan akses lokasi untuk memverifikasi data kunjungan.
+            <br /><span className="font-semibold text-blue-600">Mohon aktifkan izin lokasi di browser Anda.</span>
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={onRetry}
+              disabled={loading}
+              className={`w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-2 ${loading ? 'opacity-70 cursor-wait' : ''}`}
+            >
+              {loading ? (
+                <>
+                  <Icon icon="mdi:loading" className="animate-spin" width="20" />
+                  Mencari...
+                </>
+              ) : (
+                <>
+                  <Icon icon="mdi:check-circle" width="20" />
+                  Izinkan Akses Lokasi
+                </>
+              )}
+            </button>
+            <div className="pt-4 mt-2 border-t border-slate-100 flex flex-col gap-2">
+              <button
+                onClick={() => window.location.reload()}
+                className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors py-2 px-3 rounded-lg hover:bg-slate-50"
+              >
+                Muat Ulang Halaman
+              </button>
+              <div className="flex items-center gap-3 text-xs text-slate-300">
+                <div className="h-px bg-slate-100 flex-1"></div>
+                <span>ATAU</span>
+                <div className="h-px bg-slate-100 flex-1"></div>
+              </div>
+              <button
+                onClick={() => window.location.href = '/kunjungan'}
+                className="text-sm font-medium text-slate-500 hover:text-red-600 transition-colors py-2 px-3 rounded-lg hover:bg-red-50"
+              >
+                Kembali ke Data Kunjungan
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

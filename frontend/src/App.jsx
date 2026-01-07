@@ -19,11 +19,18 @@ import Kunjungan from "./pages/kunjungan/index";
 import KunjunganAnggota from "./pages/kunjungan/anggota";
 import KunjunganDetail from "./pages/kunjungan/detail";
 import KunjunganEdit from "./pages/kunjungan/edit";
+import Verifikasi from "./pages/verifikasi/index";
 
 import Suara from "./pages/suara/dashboard/index";
 import SuaraTest from "./pages/suara/test";
 
 import Paslon from "./pages/suara/paslon/index";
+
+import Content from "./pages/content/index";
+import CreateContent from "./pages/content/create";
+import EditContent from "./pages/content/edit";
+import DetailContent from "./pages/content/detail";
+import AnalyticContent from "./pages/content/analytic";
 
 import Partai from "./pages/suara/partai/index";
 
@@ -32,9 +39,6 @@ import AnalisisPaslon from "./pages/suara/analisis/index";
 import DPT from "./pages/suara/dpt/index";
 
 import Inbox from "./pages/inbox/index";
-
-
-
 
 import RequireAuth from "./middlewares/RequireAuth";
 import RequireRole from "./middlewares/RequireRole";
@@ -68,6 +72,11 @@ export default function App() {
             <Route path="suara/partai" element={<Partai />} />
             <Route path="suara/dpt" element={<DPT />} />
             <Route path="suara/analisis" element={<AnalisisPaslon />} />
+            <Route path="content" element={<Content />} />
+            <Route path="content/create" element={<CreateContent/>} />
+            <Route path="content/:id/edit" element={<EditContent/>} />
+            <Route path="content/:id" element={<DetailContent/>} />
+            <Route path="content/:id/analytic" element={<AnalyticContent/>} />
 
           </Route>
 

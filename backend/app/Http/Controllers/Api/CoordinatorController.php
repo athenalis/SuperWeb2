@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Coordinator;
-use App\Models\CoordinatorHistory;
 use App\Models\User;
+use App\Models\History;
 use App\Helpers\ActivityLogger;
 use App\Helpers\PhoneHelper;
 use Illuminate\Http\Request;
@@ -15,10 +15,10 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use App\Exports\KoordinatorExport;
-use App\Exports\KoordinatorDetailExport;
 use App\Imports\KoordinatorImport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 
 class CoordinatorController extends Controller
@@ -34,7 +34,6 @@ class CoordinatorController extends Controller
             'village:village_code,village',
         ])->withCount('relawans');
 
-        // GLOBAL SEARCH
         if ($request->filled('search')) {
             $keyword = $request->search;
 
@@ -59,7 +58,6 @@ class CoordinatorController extends Controller
             });
         }
 
-        // FILTER WILAYAH
         if ($request->filled('city_code')) {
             $query->where('city_code', $request->city_code);
         }
@@ -359,7 +357,6 @@ public function destroy($id)
         ], 404);
     }
 
-    // ❗ JIKA MASIH PUNYA RELAWAN
     if ($koordinator->relawans_count > 0) {
         return response()->json([
             'status' => false,
@@ -368,7 +365,6 @@ public function destroy($id)
         ], 422);
     }
 
-    // 🧾 LOG
     ActivityLogger::log([
         'action'      => 'DELETE',
         'target_type' => 'koordinator',
@@ -381,8 +377,8 @@ public function destroy($id)
     ]);
 
     DB::transaction(function () use ($koordinator) {
-        $koordinator->delete();        // soft delete
-        $koordinator->user?->delete(); // soft delete
+        $koordinator->delete();
+        $koordinator->user?->delete();
     });
 
     return response()->json([
@@ -443,4 +439,85 @@ public function import(Request $request)
         ], 500);
     }
 }
+
+public function checkNik(Request $request)
+{
+    $request->validate([
+        'nik' => 'required|digits:16'
+    ]);
+
+    $koordinator = Coordinator::withTrashed()
+        ->with('user')
+        ->where('nik', $request->nik)
+        ->first();
+
+    if (!$koordinator) {
+        return response()->json([
+            'exists' => false,
+        ], 200);
+    }
+
+    if ($koordinator->trashed()) {
+        return response()->json([
+            'exists'  => true,
+            'deleted' => true,
+            'message' => 'NIK pernah terdaftar dan saat ini nonaktif',
+        ], 200);
+    }
+
+    return response()->json([
+        'exists'  => true,
+        'deleted' => false,
+        'message' => 'NIK sudah terdaftar dan aktif',
+    ], 200);
+}
+
+public function restoreByNik(Request $request)
+{
+    $request->validate([
+        'nik' => 'required|digits:16'
+    ]);
+
+    $koordinator = Coordinator::withTrashed()
+        ->with(['user' => fn ($q) => $q->withTrashed()])
+        ->where('nik', $request->nik)
+        ->firstOrFail();
+
+    DB::transaction(function () use ($koordinator) {
+
+        if ($koordinator->trashed()) {
+            $koordinator->restore();
+        }
+
+        if ($koordinator->user && $koordinator->user->trashed()) {
+            $koordinator->user->restore();
+        }
+    });
+
+    $actor = Auth::user();
+
+    History::create([
+        'user_id'     => $actor->id,
+        'role'        => $actor->role, // admin
+        'action'      => 'RESTORE',
+        'target_type' => 'koordinator',
+        'target_name' => $koordinator->nama,
+        'field'       => 'activate_nik',
+        'old_value'   => 'deleted',
+        'new_value'   => 'active',
+    ]);
+
+    return response()->json([
+        'status' => true,
+        'message' => 'Koordinator berhasil diaktifkan kembali',
+        'data' => [
+            'koordinator' => $koordinator,
+            'user' => $koordinator->user ? [
+                'email'    => $koordinator->user->email,
+                'password' => $koordinator->user->plain_password,
+            ] : null
+        ]
+    ]);
+}
+
 }

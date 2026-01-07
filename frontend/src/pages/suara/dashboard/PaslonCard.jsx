@@ -15,7 +15,6 @@ export default function PaslonCard({ data }) {
       return;
     }
 
-    navigate(`/suara/paslon${data.id}/streak`);
   };
 
   return (

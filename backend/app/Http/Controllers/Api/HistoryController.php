@@ -42,7 +42,7 @@ class HistoryController extends Controller
         if ($h->target_type === 'koordinator') {
 
             if ($h->action === 'CREATE') {
-                return "({$role}) {$actor} menambahkan koordinator {$h->target_name} wilayah "
+                return "{$role} {$actor} menambahkan koordinator {$h->target_name} wilayah "
                     . "{$h->meta['kelurahan']}, {$h->meta['kecamatan']}, {$h->meta['kota']}";
             }
 
@@ -52,18 +52,22 @@ class HistoryController extends Controller
             }
 
             if ($h->action === 'DELETE') {
-                return "({$role}) {$actor} menghapus koordinator {$h->target_name} wilayah "
+                return "{$role} {$actor} menghapus koordinator {$h->target_name} wilayah "
                     . "{$h->meta['kelurahan']}, {$h->meta['kecamatan']}, {$h->meta['kota']}";
             }
 
             if ($h->action === 'EXPORT') {
-                return "({$role}) {$actor} mengekspor data koordinator";
+                return "{$role} {$actor} mengekspor data koordinator";
             }
 
             if ($h->action === 'IMPORT') {
-                return "({$role}) {$actor} mengimpor data koordinator sebanyak "
+                return "{$role} {$actor} mengimpor data koordinator sebanyak "
                     . ($h->meta['jumlah_data'] ?? 0) . " data";
             }
+
+            if ($h->action === 'RESTORE') {
+                return "{$role} {$actor} memulihkan data koordinator {$h->target_name}";
+            }            
         }
 
         if ($h->target_type === 'relawan') {
@@ -91,6 +95,10 @@ class HistoryController extends Controller
                 return "koordinator {$actor} mengimpor data relawan sebanyak "
                     . ($h->meta['jumlah_data'] ?? 0) . " data";
             }
+
+            if ($h->action === 'RESTORE') {
+                return "koordinator {$actor} memulihkan data relawan {$h->target_name}";
+            }            
         }
 
         return "{$actor} melakukan aksi {$h->action}";

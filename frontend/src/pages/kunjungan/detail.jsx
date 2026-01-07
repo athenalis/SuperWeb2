@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../../lib/axios";
 import { Icon } from "@iconify/react";
+import { toast } from "react-hot-toast";
 
 /* =========================
    HELPERS
@@ -28,7 +29,7 @@ function Section({ title, children }) {
     <div className="space-y-4">
       <div className="flex items-center gap-3 border-b pb-2">
         <span className="w-1.5 h-6 bg-blue-900 rounded-full" />
-        <h2 className="text-xl font-bold text-slate-800">
+        <h2 className="text-lg md:text-xl font-bold text-slate-800">
           {title}
         </h2>
       </div>
@@ -37,9 +38,9 @@ function Section({ title, children }) {
   );
 }
 
-function Grid({ children, cols = 2 }) {
+function Grid({ children }) {
   return (
-    <div className={`grid grid-cols-1 md:grid-cols-${cols} gap-4`}>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
       {children}
     </div>
   );
@@ -47,12 +48,12 @@ function Grid({ children, cols = 2 }) {
 
 function Field({ label, value, full = false }) {
   return (
-    <div className={full ? "md:col-span-2" : ""}>
-      <div className="bg-slate-50 border rounded-lg px-4 py-3 space-y-1">
-        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+    <div className={full ? "sm:col-span-2" : ""}>
+      <div className="bg-slate-50 border rounded-lg px-3 md:px-4 py-2 md:py-3 space-y-1">
+        <div className="text-[10px] md:text-xs font-semibold text-slate-500 uppercase tracking-wider">
           {label}
         </div>
-        <div className="text-base text-slate-800 font-medium">
+        <div className="text-sm md:text-base text-slate-800 font-medium break-words">
           {value || "-"}
         </div>
       </div>
@@ -67,16 +68,19 @@ const scaleLabels = {
   4: "Sangat Setuju"
 };
 
+
 /* =========================
    MAIN COMPONENT
 ========================= */
 export default function KunjunganDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const role = localStorage.getItem("role");
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
 
   useEffect(() => {
     api.get(`/kunjungan/${id}`)
@@ -100,11 +104,11 @@ export default function KunjunganDetail() {
       <p className="mt-4 text-slate-500">Memuat detail kunjungan...</p>
     </div>
   );
-  
+
   if (error) return (
-    <div className="max-w-4xl mx-auto py-10 text-center">
+    <div className="max-w-4xl mx-auto py-10 text-center px-4">
       <Icon icon="mdi:alert-circle" width="60" className="mx-auto text-red-500 mb-4" />
-      <h2 className="text-2xl font-bold text-slate-800">{error}</h2>
+      <h2 className="text-xl md:text-2xl font-bold text-slate-800">{error}</h2>
       <button onClick={() => navigate("/kunjungan")} className="mt-6 px-6 py-2 bg-blue-900 text-white rounded-lg">
         Kembali ke Daftar
       </button>
@@ -114,16 +118,16 @@ export default function KunjunganDetail() {
   if (!data) return <p className="text-center py-10 italic">Data tidak ditemukan</p>;
 
   const questions = [
-    { key: "tau_paslon", label: "Saya mengenal pasangan Pramono Anung - Rano Karno yang maju dalam pemilihan gubernur ini" },
-    { key: "tau_informasi", label: "Informasi mengenai pemilihan gubernur saat ini sudah saya pahami dengan cukup jelas" },
-    { key: "tau_visi_misi", label: "Saya mengetahui visi dan misi pasangan calon yang maju dalam pemilihan gubernur ini" },
-    { key: "tau_program_kerja", label: "Program kerja pasangan calon menjadi pertimbangan utama saya dalam menentukan pilihan" },
-    { key: "tau_rekam_jejak", label: "Rekam jejak calon gubernur memengaruhi keputusan saya dalam memilih" },
-    { key: "pernah_dikunjungi", label: "Pernah dikunjungi sebelumnya oleh relawan atau tim sukses?", type: "yesno" },
-    { key: "percaya", label: "Saya percaya pasangan calon ini memiliki kemampuan untuk memimpin daerah dengan baik" },
-    { key: "harapan", label: "Saya berharap pemimpin terpilih nanti dapat membawa perubahan yang lebih baik bagi daerah ini" },
-    { key: "pertimbangan", label: "Saya bersedia mempertimbangkan atau memilih pasangan calon apabila programnya sesuai dengan kebutuhan daerah saya" },
-    { key: "ingin_memilih", label: "Saya bersedia memilih pasangan Pramono Anung - Rano Karno pada pemilihan gubernur mendatang" },
+    { key: "tau_paslon", label: "Mengenal pasangan calon" },
+    { key: "tau_informasi", label: "Informasi pemilihan" },
+    { key: "tau_visi_misi", label: "Visi dan misi" },
+    { key: "tau_program_kerja", label: "Program kerja" },
+    { key: "tau_rekam_jejak", label: "Rekam jejak" },
+    { key: "pernah_dikunjungi", label: "Pernah dikunjungi?", type: "yesno" },
+    { key: "percaya", label: "Kepercayaan" },
+    { key: "harapan", label: "Harapan" },
+    { key: "pertimbangan", label: "Pertimbangan" },
+    { key: "ingin_memilih", label: "Kesediaan memilih" },
   ];
 
   const getStatusColor = (kunjungan) => {
@@ -131,7 +135,7 @@ export default function KunjunganDetail() {
     switch (kunjungan.status_verifikasi?.toLowerCase()) {
       case 'accepted': return 'bg-green-100 text-green-700 border-green-200';
       case 'rejected': return 'bg-red-100 text-red-700 border-red-200';
-      default: return 'bg-indigo-100 text-indigo-700 border-indigo-200';
+      default: return 'bg-amber-100 text-amber-700 border-amber-200';
     }
   };
 
@@ -140,36 +144,68 @@ export default function KunjunganDetail() {
     switch (kunjungan.status_verifikasi?.toLowerCase()) {
       case 'accepted': return 'Disetujui';
       case 'rejected': return 'Ditolak';
-      default: return 'Menunggu Verifikasi';
+      default: return 'Pending';
     }
   };
 
+  const canVerify = role === "koordinator" && data.status_verifikasi === "pending";
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6 md:space-y-8 pb-20 px-4 md:px-0">
-      
+    <div className="max-w-5xl mx-auto space-y-4 md:space-y-6 pb-20 px-3 md:px-4">
+
       {/* HEADER */}
-      <div className="bg-white rounded-2xl shadow-sm p-4 md:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center gap-3 md:gap-4">
-          <button onClick={() => navigate("/kunjungan")} className="p-2 hover:bg-slate-100 rounded-full transition text-slate-600">
-            <Icon icon="mdi:arrow-left" width="24" />
-          </button>
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold text-blue-900">Detail Kunjungan</h1>
-            <p className="text-[10px] md:text-sm text-slate-500 font-medium tracking-tight">Dicatat pada {formatDate(data.created_at)}</p>
+      <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-3 md:p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 md:gap-4">
+          <div className="flex items-center gap-2 md:gap-4">
+            <button onClick={() => navigate(-1)} className="p-1.5 md:p-2 hover:bg-slate-100 rounded-full transition text-slate-600">
+              <Icon icon="mdi:arrow-left" width="20" className="md:w-6 md:h-6" />
+            </button>
+            <div>
+              <h1 className="text-lg md:text-2xl font-bold text-blue-900">Detail Kunjungan</h1>
+              <p className="text-[10px] md:text-sm text-slate-500 font-medium">{formatDate(data.created_at)}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 md:gap-3 w-full sm:w-auto">
+            {role === "relawan" && data.status_verifikasi === "rejected" && (
+              <button
+                onClick={() => navigate(`/kunjungan/${data.id}/edit`)}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-6 py-2 rounded-lg md:rounded-xl bg-amber-50 text-amber-700 border border-amber-200 font-bold text-xs md:text-sm hover:bg-amber-100 transition-colors"
+              >
+                <Icon icon="mdi:pencil" width="16" className="md:w-5 md:h-5" />
+                <span className="hidden sm:inline">Edit Data</span>
+                <span className="sm:hidden">Edit</span>
+              </button>
+            )}
+
+
+
+            <div className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg md:rounded-xl border-2 font-bold text-[10px] md:text-sm whitespace-nowrap ${getStatusColor(data)}`}>
+              {getStatusLabel(data)}
+            </div>
           </div>
         </div>
-        
-        <div className={`w-full md:w-auto text-center px-4 py-2 rounded-xl border-2 font-bold text-xs md:text-sm ${getStatusColor(data)}`}>
-          {getStatusLabel(data)}
-        </div>
+
+        {/* Komentar verifikasi jika ditolak */}
+        {data.status_verifikasi === "rejected" && data.komentar_verifikasi && (
+          <div className="mt-4 p-3 md:p-4 bg-red-50 border border-red-200 rounded-xl">
+            <div className="flex items-start gap-2">
+              <Icon icon="mdi:alert-circle" className="text-red-500 shrink-0 mt-0.5" width="18" />
+              <div>
+                <div className="text-xs font-bold text-red-700 uppercase mb-1">Alasan Penolakan:</div>
+                <p className="text-sm text-red-800">{data.komentar_verifikasi}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-        
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+
         {/* LEFT COLUMN: PRIMARY INFO */}
-        <div className="lg:col-span-2 space-y-6 md:space-y-8">
-          
-          <div className="bg-white rounded-2xl shadow-sm p-5 md:p-8 space-y-6 md:space-y-8">
+        <div className="lg:col-span-2 space-y-4 md:space-y-6">
+
+          <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6 space-y-5 md:space-y-8">
             <Section title="Informasi Kepala Keluarga">
               <Grid>
                 <Field label="Nama Lengkap" value={data.nama} />
@@ -180,10 +216,6 @@ export default function KunjunganDetail() {
                 <Field label="Tanggal Lahir / Umur" value={`${formatDate(data.tanggal)} (${data.umur} thn)`} />
               </Grid>
               <Field label="Alamat Lengkap" value={data.alamat} full />
-              <div className="grid grid-cols-2 gap-4">
-                 <Field label="Latitude" value={data.latitude} />
-                 <Field label="Longitude" value={data.longitude} />
-              </div>
             </Section>
 
             <Section title="Anggota Keluarga">
@@ -204,7 +236,7 @@ export default function KunjunganDetail() {
                         {data.family_form.members.map((m) => (
                           <tr key={m.id}>
                             <td className="px-4 py-3 font-semibold text-slate-800">{m.nama}</td>
-                            <td className="px-4 py-3 text-slate-600 font-mono">{m.nik}</td>
+                            <td className="px-4 py-3 text-slate-600 font-mono text-xs">{m.nik}</td>
                             <td className="px-4 py-3 text-slate-600 capitalize">{m.hubungan}</td>
                             <td className="px-4 py-3 text-slate-600">{m.umur} Thn</td>
                           </tr>
@@ -214,40 +246,42 @@ export default function KunjunganDetail() {
                   </div>
 
                   {/* MOBILE CARDS */}
-                  <div className="md:hidden space-y-3">
+                  <div className="md:hidden space-y-2">
                     {data.family_form.members.map((m) => (
-                      <div key={m.id} className="bg-slate-50 border rounded-xl p-4 space-y-2">
+                      <div key={m.id} className="bg-slate-50 border rounded-lg p-3 space-y-1">
                         <div className="flex justify-between items-start">
                           <div>
-                            <div className="font-bold text-slate-900">{m.nama}</div>
-                            <div className="text-xs text-slate-500 font-mono">{m.nik}</div>
+                            <div className="font-bold text-sm text-slate-900">{m.nama}</div>
+                            <div className="text-[10px] text-slate-500 font-mono">{m.nik}</div>
                           </div>
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold uppercase tracking-wider">
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[9px] font-bold uppercase">
                             {m.hubungan}
                           </span>
                         </div>
-                        <div className="text-xs text-slate-600">
-                          <span className="font-semibold">{m.umur} Tahun</span> • {m.pendidikan || "-"} • {m.pekerjaan || "-"}
+                        <div className="text-[10px] text-slate-600">
+                          <span className="font-semibold">{m.umur} Tahun</span>
                         </div>
                       </div>
                     ))}
                   </div>
                 </>
               ) : (
-                <p className="text-slate-500 italic text-center py-6 bg-slate-50 rounded-xl border border-dashed">Tidak ada data anggota keluarga</p>
+                <p className="text-slate-500 italic text-center py-4 md:py-6 bg-slate-50 rounded-xl border border-dashed text-sm">Tidak ada data anggota keluarga</p>
               )}
             </Section>
 
             <Section title="Hasil Kuisioner">
-              <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
                 {questions.map((q, i) => (
-                  <div key={q.key} className="p-4 rounded-xl border bg-slate-50/50">
-                    <div className="text-xs text-slate-400 font-bold mb-1">PERTANYAAN #{i+1}</div>
-                    <p className="text-sm font-semibold text-slate-700 leading-relaxed mb-2">{q.label}</p>
-                    <div className="inline-block px-3 py-1 bg-white border rounded-lg text-sm font-bold text-blue-900 shadow-sm">
-                      {q.type === 'yesno' 
+                  <div key={q.key} className="p-2 md:p-3 rounded-lg md:rounded-xl border bg-slate-50/50">
+                    <div className="text-[9px] md:text-xs text-slate-400 font-bold mb-1 uppercase">Q{i + 1}</div>
+                    <p className="text-[10px] md:text-xs font-medium text-slate-700 leading-tight mb-2 line-clamp-2">
+                      {q.label}
+                    </p>
+                    <div className="px-2 py-1 bg-white border rounded text-[10px] md:text-xs font-semibold text-slate-800 text-center break-words whitespace-pre-wrap">
+                      {q.type === 'yesno'
                         ? (data.kepuasan?.[q.key] ? "Ya" : "Tidak")
-                        : (scaleLabels[data.kepuasan?.[q.key]] || "Belum Dijawab")
+                        : (scaleLabels[data.kepuasan?.[q.key]] || data.kepuasan?.[q.key] || "-")
                       }
                     </div>
                   </div>
@@ -258,64 +292,52 @@ export default function KunjunganDetail() {
         </div>
 
         {/* RIGHT COLUMN: MEDIA & CONTEXT */}
-        <div className="space-y-8">
-          
-          <div className="bg-white rounded-2xl shadow-sm p-6 space-y-6">
-            <h3 className="font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
+        <div className="space-y-4 md:space-y-6">
+
+          <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6 space-y-4 md:space-y-6">
+            <h3 className="font-bold text-slate-800 border-b pb-2 flex items-center gap-2 text-sm md:text-base">
               <Icon icon="mdi:camera" className="text-blue-900" />
               Dokumentasi KTP
             </h3>
             {data.foto_ktp ? (
-              <div className="rounded-xl overflow-hidden border shadow-inner">
-                 <img 
-                  src={import.meta.env.VITE_STORAGE_URL 
-                    ? `${import.meta.env.VITE_STORAGE_URL}/${data.foto_ktp}`
-                    : `${api.defaults.baseURL.replace('/api', '')}/storage/${data.foto_ktp}`
-                  } 
-                  alt="KTP Head Of Family" 
-                  className="w-full h-auto object-contain bg-slate-100 min-h-[200px]"
+              <div className="rounded-lg md:rounded-xl overflow-hidden border shadow-inner">
+                <img
+                  src={`http://192.168.1.29:9000/storage/${data.foto_ktp}`}
+                  alt="KTP Head Of Family"
+                  className="w-full h-auto object-contain bg-slate-100 min-h-[150px] md:min-h-[200px]"
                   onError={(e) => {
-                    e.target.onerror = null; 
-                    e.target.src = "https://placehold.co/400x250?text=Foto+KTP+Bermasalah";
+                    e.target.onerror = null;
+                    e.target.src = "https://placehold.co/400x250?text=Foto+KTP";
                   }}
                 />
               </div>
             ) : (
-              <div className="bg-slate-100 aspect-video rounded-xl flex items-center justify-center text-slate-400 italic text-sm">
+              <div className="bg-slate-100 aspect-video rounded-lg md:rounded-xl flex items-center justify-center text-slate-400 italic text-xs md:text-sm">
                 Foto KTP tidak tersedia
               </div>
             )}
-            
-            <Section title="Konteks Penugasan">
-              <div className="space-y-4">
-                <div className="text-sm">
-                  <span className="block text-xs text-slate-400 uppercase font-bold">Relawan</span>
-                  <span className="font-semibold text-slate-700">{data.relawan?.nama || "Unknown"}</span>
-                </div>
-                <div className="text-sm">
-                  <span className="block text-xs text-slate-400 uppercase font-bold">Kampanye</span>
-                  <span className="font-semibold text-slate-700">{data.campaign?.nama || "-"}</span>
-                </div>
-                <div className="text-sm">
-                  <span className="block text-xs text-slate-400 uppercase font-bold">Status Berkas</span>
-                  <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${data.status === 'completed' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
-                    {data.status}
-                  </span>
-                </div>
+
+            <div className="space-y-3 md:space-y-4">
+
+              <div className="text-xs md:text-sm">
+                <span className="block text-[10px] md:text-xs text-slate-400 uppercase font-bold">Relawan</span>
+                <span className="font-semibold text-slate-700">{data.relawan?.nama || "Unknown"}</span>
               </div>
-            </Section>
+            </div>
           </div>
 
-          <div className="bg-blue-900 rounded-2xl p-6 text-white shadow-lg space-y-4">
-              <h3 className="font-bold flex items-center gap-2">
-                <Icon icon="mdi:information-outline" />
-                Catatan Sistem
-              </h3>
-              <p className="text-xs text-blue-100 leading-relaxed italic">
-                Data ini dicatat pada {formatDate(data.created_at)}. 
-                Menunggu verifikasi dari Koordinator untuk divalidasi sebagai tugas yang sah.
-              </p>
-          </div>
+          {/* Tombol Verifikasi Mobile - Fixed Bottom */}
+          {canVerify && (
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 p-3 bg-white border-t shadow-lg">
+              <button
+                // onClick={() => setShowVerifikasiModal(true)} // This line was removed
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-900 text-white font-bold text-sm hover:bg-blue-800 transition-colors"
+              >
+                <Icon icon="mdi:clipboard-check" width="20" />
+                Verifikasi Kunjungan
+              </button>
+            </div>
+          )}
 
         </div>
 

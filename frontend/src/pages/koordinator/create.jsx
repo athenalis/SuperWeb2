@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +23,12 @@ export default function InputKoordinator({ onClose }) {
   });
 
   const [errors, setErrors] = useState({});
+  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [restoreNik, setRestoreNik] = useState(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoredUser, setRestoredUser] = useState(null);
+  const [isRestoreMode, setIsRestoreMode] = useState(false);
+
 
   /* =========================
      VALIDASI PER FIELD
@@ -111,6 +118,50 @@ case "no_hp":
     return Object.keys(newErrors).length === 0;
   };
 
+  const checkNik = async (nik) => {
+    const res = await api.post("/koordinator/check-nik", { nik });
+  
+    if (res.data.exists && res.data.deleted) {
+      setRestoreNik(nik);
+      setShowRestoreConfirm(true);
+    }
+  };  
+
+  const handleRestore = async () => {
+    if (!restoreNik) return;
+  
+    setIsRestoring(true);
+  
+    try {
+      const res = await api.post("/koordinator/restore", {
+        nik: restoreNik,
+      });
+  
+      const { koordinator, user } = res.data.data;
+  
+      setForm({
+        nama: koordinator.nama,
+        nik: koordinator.nik,
+        no_hp: koordinator.no_hp,
+        tps: koordinator.tps,
+        alamat: koordinator.alamat,
+        province_code: koordinator.province_code,
+        city_code: koordinator.city_code,
+        district_code: koordinator.district_code,
+        village_code: koordinator.village_code,
+      });
+  
+      setIsRestoreMode(true);
+      setRestoredUser(user);
+      setShowRestoreConfirm(false);
+    } catch (err) {
+      console.error(err.response?.data);
+      toast.error("Gagal mengaktifkan koordinator");
+    } finally {
+      setIsRestoring(false);
+    }
+  };  
+
   /* =========================
      WILAYAH API
   ========================= */
@@ -142,18 +193,28 @@ onSuccess: (res) => {
 
   const akun = res.data.data.user; 
 
-  toast.success(
-    `Koordinator berhasil dibuat!\nEmail: ${akun.email}\nPassword: ${akun.password}`, {
-      duration: 5000,
-      style: {
-        whiteSpace: "pre-line",
-        background: "white",
-        color: "#071258ff",
-        padding: "14px",
-        borderRadius: "10px",
-      },
-    }
-  );
+  if (restoredUser) {
+    toast.success(
+      `Koordinator berhasil diaktifkan!\nEmail: ${restoredUser.email}\nPassword: ${restoredUser.password}`,
+      {
+        duration: 6000,
+        style: { whiteSpace: "pre-line" },
+      }
+    );
+
+    setRestoredUser(null);
+  } else {
+    // fallback: create baru
+    const akun = res.data.data.user;
+
+    toast.success(
+      `Koordinator berhasil dibuat!\nEmail: ${akun.email}\nPassword: ${akun.password}`,
+      {
+        duration: 5000,
+        style: { whiteSpace: "pre-line" },
+      }
+    );
+  }
 
   navigate("/koordinator"); // hanya ini
 
@@ -181,6 +242,15 @@ onSuccess: (res) => {
     toast.error("Periksa kembali form Anda");
     return;
   }
+  if (isRestoreMode) {
+    toast.success(
+      `Koordinator berhasil diaktifkan!\nEmail: ${restoredUser.email}\nPassword: ${restoredUser.password}`,
+      { duration: 6000, style: { whiteSpace: "pre-line" } }
+    );
+
+    navigate("/koordinator");
+    return;
+  }
   mutation.mutate();
 };
   /* =========================
@@ -195,138 +265,196 @@ onSuccess: (res) => {
   const disabledSelect = "bg-slate-100 cursor-not-allowed";
 
   return (
-    <div className="bg-white rounded-2xl p-8 shadow max-w-8xl mx-auto">
-      <h2 className="text-4xl text-blue-900 font-bold mb-6 text-center">
-        Input Koordinator
-      </h2>
-
-      <form onSubmit={handleSubmit} noValidate className="space-y-5">
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Nama Lengkap" required error={errors.nama}>
-          <input name="nama" value={form.nama} onChange={handleChange} className={baseInput} placeholder="Masukkan nama lengkap"/>
-        </Field>
-
-        <Field label="NIK" required error={errors.nik}>
-          <input
-            name="nik"
-            value={form.nik}
-            onChange={(e) => {
-              const value = e.target.value;
-              if (!/^\d*$/.test(value)) return;
-              if (value.length > 16) return;
-              handleChange(e);
-            }}
-            className={baseInput}
-            inputMode="numeric"
-            placeholder="Masukkan NIK"
-          />
-        </Field>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="No HP" required error={errors.no_hp}>
-            <input
-              name="no_hp"
-              value={form.no_hp}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (!/^\+?\d*$/.test(value)) return;
-                if (value.length > 14) return; // +628xxxxxxxxxx
-                handleChange(e);
-              }}
+    <>
+      <div className="bg-white rounded-2xl p-8 shadow max-w-8xl mx-auto">
+        <h2 className="text-4xl text-blue-900 font-bold mb-6 text-center">
+          Input Koordinator
+        </h2>
+  
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
+  
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="NIK" required error={errors.nik}>
+              <input
+                name="nik"
+                value={form.nik}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (!/^\d*$/.test(value)) return;
+                  if (value.length > 16) return;
+                  handleChange(e);
+                }}
+                onBlur={() => {
+                  if (form.nik.length === 16) {
+                    checkNik(form.nik);
+                  }
+                }}
+                className={baseInput}
+                inputMode="numeric"
+                placeholder="Masukkan NIK"
+              />
+            </Field>
+  
+            <Field label="Nama Lengkap" required error={errors.nama}>
+              <input
+                name="nama"
+                value={form.nama}
+                onChange={handleChange}
+                className={baseInput}
+              />
+            </Field>
+          </div>
+  
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="No HP" required error={errors.no_hp}>
+              <input
+                name="no_hp"
+                value={form.no_hp}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (!/^\+?\d*$/.test(value)) return;
+                  if (value.length > 14) return;
+                  handleChange(e);
+                }}
+                className={baseInput}
+                inputMode="numeric"
+                placeholder="Cth: 0821xxxx, 62821xxxx, +62821xxxx"
+              />
+            </Field>
+  
+            <Field label="TPS" required error={errors.tps}>
+              <input
+                name="tps"
+                value={form.tps}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (!/^\d*$/.test(value)) return;
+                  if (value.length > 3) return;
+                  handleChange(e);
+                }}
+                className={baseInput}
+                inputMode="numeric"
+                placeholder="Cth: 001"
+              />
+            </Field>
+          </div>
+  
+          <Field label="Alamat" required error={errors.alamat}>
+            <textarea
+              name="alamat"
+              value={form.alamat}
+              onChange={handleChange}
               className={baseInput}
-              inputMode="numeric"
-              placeholder="Cth: 0821xxxx, 62821xxxx, +62821xxxx"
+              placeholder="Masukkan alamat anda"
             />
           </Field>
-
-          <Field label="TPS" required error={errors.tps}>
-            <input
-              name="tps"
-              value={form.tps}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (!/^\d*$/.test(value)) return;
-                if (value.length > 3) return;
-                handleChange(e);
-              }}
-              className={baseInput}
-              inputMode="numeric"
-              placeholder="Cth: 001"
+  
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Provinsi">
+              <select
+                disabled
+                value={31}
+                className={`px-6 py-3 pr-12 ${baseSelect} ${disabledSelect}`}
+              >
+                <option>DKI JAKARTA</option>
+              </select>
+            </Field>
+  
+            <SelectField
+              label="Kota/Kabupaten"
+              required
+              error={errors.city_code}
+              name="city_code"
+              value={form.city_code}
+              onChange={handleChange}
+              options={cities}
+              placeholder="Pilih Kota/Kabupaten"
+              valueKey="city_code"
+              labelKey="city"
             />
-          </Field>
+  
+            <SelectField
+              label="Kecamatan"
+              required
+              error={errors.district_code}
+              name="district_code"
+              value={form.district_code}
+              onChange={handleChange}
+              options={districts}
+              placeholder="Pilih Kecamatan"
+              disabled={!form.city_code}
+              valueKey="district_code"
+              labelKey="district"
+            />
+  
+            <SelectField
+              label="Kelurahan"
+              required
+              error={errors.village_code}
+              name="village_code"
+              value={form.village_code}
+              onChange={handleChange}
+              options={villages}
+              placeholder="Pilih Kelurahan"
+              disabled={!form.district_code}
+              valueKey="village_code"
+              labelKey="village"
+            />
+          </div>
+  
+          <div className="flex justify-end gap-4 pt-4">
+            <button
+              type="submit"
+              disabled={mutation.isLoading}
+              className="bg-blue-900 hover:bg-blue-800 text-white px-6 py-2 rounded-lg"
+            >
+              {mutation.isLoading ? "Menyimpan..." : "Simpan"}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/koordinator")}
+              className="bg-white-100 px-6 py-2 rounded-lg text-gray-600 hover:underline"
+            >
+              Batal
+            </button>
+          </div>
+        </form>
+      </div>
+  
+      {/* =========================
+          SHOW RESTORE MODAL
+      ========================= */}
+      {showRestoreConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-lg">
+            <h3 className="text-xl font-bold mb-3 text-blue-900">
+              NIK Sudah Pernah Terdaftar
+            </h3>
+            <p className="text-gray-600 mb-6">
+              NIK ini pernah terdaftar dan saat ini nonaktif.
+              Apakah ingin mengaktifkan kembali?
+            </p>
+  
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowRestoreConfirm(false)}
+                className="px-4 py-2 rounded-lg border"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleRestore}
+                disabled={isRestoring}
+                className="px-4 py-2 rounded-lg bg-blue-900 text-white"
+              >
+                {isRestoring ? "Mengaktifkan..." : "Ya, Aktifkan"}
+              </button>
+            </div>
+          </div>
         </div>
-
-        <Field label="Alamat" required error={errors.alamat}>
-          <textarea name="alamat" value={form.alamat} onChange={handleChange} className={baseInput} placeholder="Masukkan alamat anda"/>
-        </Field>
-
-        {/* WILAYAH */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-          <Field label="Provinsi">
-            <select disabled value={31} className={`px-6 py-3 pr-12 ${baseSelect} ${disabledSelect}`}>
-              <option>DKI JAKARTA</option>
-            </select>
-          </Field>
-
-          <SelectField
-            label="Kota/Kabupaten"
-            required
-            error={errors.city_code}
-            name="city_code"
-            value={form.city_code}
-            onChange={handleChange}
-            options={cities}
-            placeholder="Pilih Kota/Kabupaten"
-            valueKey="city_code"
-            labelKey="city"
-          />
-
-          <SelectField
-            label="Kecamatan"
-            required
-            error={errors.district_code}
-            name="district_code"
-            value={form.district_code}
-            onChange={handleChange}
-            options={districts}
-            placeholder="Pilih Kecamatan"
-            disabled={!form.city_code}
-            valueKey="district_code"
-            labelKey="district"
-          />
-
-          <SelectField
-            label="Kelurahan"
-            required
-            error={errors.village_code}
-            name="village_code"
-            value={form.village_code}
-            onChange={handleChange}
-            options={villages}
-            placeholder="Pilih Kelurahan"
-            disabled={!form.district_code}
-            valueKey="village_code"
-            labelKey="village"
-          />
-
-        </div>
-
-        <div className="flex justify-end gap-4 pt-4">
-          <button type="submit" 
-          disabled={mutation.isLoading} 
-          className="bg-blue-900 hover:bg-blue-800 text-white px-6 py-2 rounded-lg">
-            {mutation.isLoading ? "Menyimpan..." : "Simpan"}
-          </button>
-          <button type="button" onClick={() => navigate("/koordinator")} className="bg-white-100 px-6 py-2 rounded-lg text-gray-600 hover:underline">
-            Batal
-          </button>
-        </div>
-      </form>
-    </div>
-  );
+      )}
+    </>
+  );  
 }
 
 /* =========================
@@ -392,4 +520,4 @@ function SelectField({
       </div>
     </Field>
   );
-}
+} 

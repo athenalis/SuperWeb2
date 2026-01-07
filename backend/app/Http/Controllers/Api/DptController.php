@@ -38,10 +38,16 @@ class DptController extends Controller
                 'label' => 'Prioritas Rendah (12 – 25 rb)',
             ],
             [
-                'min'   => 0,
+                'min'   => 1,
                 'max'   => 12000,
                 'color' => '#ffffb2',
-                'label' => 'Prioritas Sangat Rendah (0 – 12 rb)',
+                'label' => 'Prioritas Sangat Rendah (1 – 12 rb)',
+            ],
+            [
+                'min'   => 0,
+                'max'   => 0,
+                'color' => '#ffffb2',
+                'label' => 'Tidak diklasifikasikan',
             ],
         ];
     }
@@ -79,17 +85,55 @@ class DptController extends Controller
                 'color' => '#ffffb2',
                 'label' => 'Prioritas Sangat Rendah (0 – 80 rb)',
             ],
+            [
+                'min'   => 0,
+                'max'   => 0,
+                'color' => '#acacacff',
+                'label' => 'Tidak diklasifikasikan',
+            ],
         ];
     }
 
-    private function colorFromDensity(float $density, array $legend): string
+    private function legendDensityCity(): array
     {
-        foreach ($legend as $r) {
-            if ($density >= $r['min'] && $density <= $r['max']) {
-                return $r['color'];
-            }
-        }
-        return '#FFFFCC';
+        return [
+            [
+                'min'   => 12001,
+                'max'   => 15000,
+                'color' => '#bd0026',
+                'label' => 'Prioritas Utama (12 – 15 rb)',
+            ],
+            [
+                'min'   => 9001,
+                'max'   => 12000,
+                'color' => '#f03b20',
+                'label' => 'Prioritas Tinggi (9 – 12 rb)',
+            ],
+            [
+                'min'   => 6001,
+                'max'   => 9000,
+                'color' => '#fd8d3c',
+                'label' => 'Prioritas Sedang (6 – 9 rb)',
+            ],
+            [
+                'min'   => 3001,
+                'max'   => 6000,
+                'color' => '#fecc5c',
+                'label' => 'Prioritas Rendah (3 – 6 rb)',
+            ],
+            [
+                'min'   => 0,
+                'max'   => 3000,
+                'color' => '#ffffb2',
+                'label' => 'Prioritas Sangat Rendah (0 – 3 rb)',
+            ],
+            [
+                'min'   => 0,
+                'max'   => 0,
+                'color' => '#acacacff',
+                'label' => 'Tidak diklasifikasikan',
+            ],
+        ];
     }
 
     private function legendInfoFromDensity(float $density, array $legend): array
@@ -242,6 +286,64 @@ class DptController extends Controller
 
             return [
                 'level'  => 'district',
+                'count'  => $data->count(),
+                'legend' => $legend,
+                'data'   => $data,
+            ];
+        });
+    }
+
+    public function dptCity()
+    {
+        $cacheKey = 'map:dpt:density:city';
+
+        return Cache::remember($cacheKey, now()->addHours(6), function () {
+
+            $legend = $this->legendDensityCity();
+
+            $rows = DB::table('regions as r')
+                ->leftJoin('dpt as d', function ($join) {
+                    $join->on('d.province', '=', 'r.province')
+                        ->on('d.city', '=', 'r.city');
+                })
+                ->where('r.level', 'CITY')
+                ->select(
+                    'r.province',
+                    'r.city',
+                    'r.area_km2',
+                    DB::raw('COUNT(d.id) as total_dpt'),
+                    DB::raw('
+                        CASE 
+                            WHEN r.area_km2 > 0 
+                            THEN ROUND(COUNT(d.id) / r.area_km2, 2)
+                            ELSE 0 
+                        END as density
+                    ')
+                )
+                ->groupBy(
+                    'r.province',
+                    'r.city',
+                    'r.area_km2'
+                )
+                ->orderByDesc('density')
+                ->get();
+
+            $data = $rows->map(function ($item) use ($legend) {
+                $legendInfo = $this->legendInfoFromDensity($item->density, $legend);
+
+                return [
+                    'province'  => $item->province,
+                    'city'      => $item->city,
+                    'area_km2'  => (float) $item->area_km2,
+                    'total_dpt' => (int) $item->total_dpt,
+                    'density'   => (float) $item->density,
+                    'color'     => $legendInfo['color'],
+                    'priority'  => $this->priorityTextFromLabel($legendInfo['label']),
+                ];
+            });
+
+            return [
+                'level'  => 'city',
                 'count'  => $data->count(),
                 'legend' => $legend,
                 'data'   => $data,

@@ -9,13 +9,15 @@ import {
   Legend,
 } from "chart.js";
 import api from "../../../lib/axios";
-import PetaSuaraMap  from "./mapPaslon";
+import KelurahanMap from "./mapPaslon";
 import { createPortal } from "react-dom";
+import { Icon} from "@iconify/react";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
+// Normalize untuk matching dengan GeoJSON (hapus semua non-huruf)
 const normalize = (str = "") =>
-  str.toUpperCase().replace(/\s+/g, " ").replace(/[.,]/g, "").trim();
+  str.toString().toUpperCase().replace(/[^A-Z]/g, "");
 
 export default function PaslonIndex() {
   const [cities, setCities] = useState([]);
@@ -23,27 +25,35 @@ export default function PaslonIndex() {
 
   const [selectedCityCode, setSelectedCityCode] = useState("");
   const [selectedDistrictCode, setSelectedDistrictCode] = useState("");
-  const [mapLevel, setMapLevel] = useState("city");
+
+  // Names for map filtering (sync dengan dropdown)
+  const [selectedCityName, setSelectedCityName] = useState("");
+  const [selectedDistrictName, setSelectedDistrictName] = useState("");
 
   const [chartRows, setChartRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [showDetail, setShowDetail] = useState(false);
 
-  const [petaData, setPetaData] = useState([]);
+  // Peta data untuk 3 level
+  const [petaDataKota, setPetaDataKota] = useState([]);
+  const [petaDataKecamatan, setPetaDataKecamatan] = useState([]);
+  const [petaDataKelurahan, setPetaDataKelurahan] = useState([]);
+
+  // GeoJSON untuk 3 level
   const [geoCity, setGeoCity] = useState(null);
+  const [geoDistrict, setGeoDistrict] = useState(null);
   const [geoVillage, setGeoVillage] = useState(null);
   const [geoSeribu, setGeoSeribu] = useState(null);
-  const [geoDistrict, setGeoDistrict] = useState(null);
 
-  /* LOAD CITIES */
+  /* LOAD CITIES for filter dropdown */
   useEffect(() => {
     api.get("/wilayah/cities/31")
       .then(res => setCities(res.data || []))
       .catch(() => setCities([]));
   }, []);
 
-  /* LOAD DISTRICTS */
+  /* LOAD DISTRICTS for filter dropdown */
   useEffect(() => {
     if (!selectedCityCode) {
       setDistricts([]);
@@ -57,7 +67,7 @@ export default function PaslonIndex() {
 
   /* LOAD CHART */
   useEffect(() => {
-    setLoading(false);
+    setLoading(true);
 
     const params = {};
     if (selectedCityCode) params.city_code = selectedCityCode;
@@ -90,25 +100,104 @@ export default function PaslonIndex() {
     scales: { y: { beginAtZero: true } },
   };
 
-  /* GEOJSON */
-useEffect(() => {
-  Promise.all([
-    fetch("/data/id31_dki_jakarta.geojson").then(r => r.json()),
-    fetch("/data/district.geojson").then(r => r.json()),
-    fetch("/data/id31_dki_jakarta_village.geojson").then(r => r.json()),
-  ]).then(([city, district, village, seribu]) => {
-    setGeoCity(city);
-    setGeoDistrict(district);
-    setGeoVillage(village);
-    setGeoSeribu(seribu);
-  });
-}, []);
+  /* GEOJSON - Load semua 3 level */
+  useEffect(() => {
+    fetch("/data/id31_dki_jakarta.geojson").then(r => r.json()).then(setGeoCity);
+    fetch("/data/district.geojson").then(r => r.json()).then(setGeoDistrict);
+    fetch("/data/id31_dki_jakarta_village.geojson").then(r => r.json()).then(setGeoVillage);
+    // fetch("/data/id31_dki_jakarta_kepseribu.geojson").then(r => r.json()).then(setGeoSeribu);
+  }, []);
 
-const isMapReady =
-  geoCity &&
-  geoDistrict &&
-  geoVillage &&
-  geoCity.features?.length > 0;
+  /* PETA DATA - Load semua 3 level dari API */
+  useEffect(() => {
+    api.get("/peta/paslon/kota").then(res => setPetaDataKota(res.data.data || []));
+    api.get("/peta/paslon/kecamatan").then(res => setPetaDataKecamatan(res.data.data || []));
+    api.get("/peta/paslon/kelurahan").then(res => setPetaDataKelurahan(res.data.data || []));
+  }, []);
+
+  // Process suara data untuk setiap level
+  const suaraKota = useMemo(() => {
+    const o = {};
+    petaDataKota.forEach(d => {
+      if (!d.city || !d.suara) return;
+      o[normalize(d.city)] = d.suara;
+    });
+    return o;
+  }, [petaDataKota]);
+
+  const suaraKecamatan = useMemo(() => {
+    const o = {};
+    petaDataKecamatan.forEach(d => {
+      if (!d.district || !d.suara) return;
+      o[normalize(d.district)] = d.suara;
+    });
+    return o;
+  }, [petaDataKecamatan]);
+
+  const suaraKelurahan = useMemo(() => {
+    const o = {};
+    petaDataKelurahan.forEach(d => {
+      if (!d.village || !d.suara) return;
+      // Include district info for filtering
+      o[normalize(d.village)] = { ...d.suara, district: d.district };
+    });
+    return o;
+  }, [petaDataKelurahan]);
+
+  const isMapReady = geoCity && geoDistrict && geoVillage &&
+    (Object.keys(suaraKota).length > 0 || Object.keys(suaraKecamatan).length > 0 || Object.keys(suaraKelurahan).length > 0);
+
+  /* =========================================
+     HANDLE MAP CLICK
+     - Level Kota: Update selectedCityCode -> Fetch districts -> Chart updates
+     - Level Kecamatan: Update selectedDistrictCode -> Chart updates
+  ========================================= */
+  const handleMapClick = (name, level) => {
+    const raw = normalize(name);
+
+    if (level === "kota") {
+      // Find matching city
+      const found = cities.find(c => normalize(c.city) === raw);
+      if (found) {
+        setSelectedCityCode(found.city_code);
+        setSelectedDistrictCode("");
+        setSelectedCityName(found.city);
+        setSelectedDistrictName("");
+      }
+    } else if (level === "kecamatan") {
+      // Find matching district
+      const found = districts.find(d => normalize(d.district) === raw);
+      if (found) {
+        setSelectedDistrictCode(found.district_code);
+        setSelectedDistrictName(found.district);
+      } else {
+        // If districts not loaded yet, try to find from petaDataKecamatan
+        const kecData = petaDataKecamatan.find(d => normalize(d.district) === raw);
+        if (kecData) {
+          const cityData = cities.find(c => normalize(c.city) === normalize(kecData.city));
+          if (cityData) {
+            setSelectedCityCode(cityData.city_code);
+            setSelectedCityName(cityData.city);
+            setSelectedDistrictName(kecData.district);
+          }
+        }
+      }
+    }
+    // Kelurahan level - just show info, don't change dropdown (mentok di kecamatan)
+  };
+
+  /* =========================================
+     HANDLE LEVEL CHANGE (zoom out reset)
+  ========================================= */
+  const handleLevelChange = (level) => {
+    if (level === "kota") {
+      setSelectedCityCode("");
+      setSelectedDistrictCode("");
+      setSelectedCityName("");
+      setSelectedDistrictName("");
+    }
+  };
+
 
   return (
     <div className="space-y-4">
@@ -120,27 +209,71 @@ const isMapReady =
         </h1>
 
         <div className="flex flex-col md:flex-row gap-3">
+           
+           {/* FILTER KOTA */}
+        <div className="relative flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 bg-white">
+          <Icon
+            icon="mdi:office-building"
+            className="text-slate-500 w-5 h-5 shrink-0"
+          />
           <select
-            className="border rounded-lg px-4 py-2"
+            className="bg-transparent outline-none flex-1 cursor-pointer text-sm"
             value={selectedCityCode}
-            onChange={(e) => setSelectedCityCode(e.target.value)}
+            onChange={(e) => {
+              const cityCode = e.target.value;
+              setSelectedCityCode(cityCode);
+              setSelectedDistrictCode("");
+              if (cityCode) {
+                const found = cities.find(c => c.city_code === cityCode);
+                if (found) {
+                  setSelectedCityName(found.city);
+                  setSelectedDistrictName("");
+                }
+              } else {
+                setSelectedCityName("");
+                setSelectedDistrictName("");
+              }
+            }}
           >
             <option value="">Semua Kab/Kota (DKI)</option>
             {cities.map(c => (
-              <option key={c.city_code} value={c.city_code}>{c.city}</option>
+              <option key={c.city_code} value={c.city_code}>
+                {c.city}
+              </option>
             ))}
           </select>
+        </div>
 
+        {/* FILTER KECAMATAN */}
+        <div className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 bg-white">
+          <Icon
+            icon="mdi:map-marker-outline"
+            className="text-slate-500 w-5 h-5 shrink-0"
+          />
           <select
-            className="border rounded-lg px-4 py-2"
+            className="bg-transparent outline-none flex-1 cursor-pointer text-sm"
             value={selectedDistrictCode}
-            onChange={(e) => setSelectedDistrictCode(e.target.value)}
+            onChange={(e) => {
+              const districtCode = e.target.value;
+              setSelectedDistrictCode(districtCode);
+              if (districtCode) {
+                const found = districts.find(d => d.district_code === districtCode);
+                if (found) {
+                  setSelectedDistrictName(found.district);
+                }
+              } else {
+                setSelectedDistrictName("");
+              }
+            }}
           >
             <option value="">Semua Kecamatan</option>
             {districts.map(d => (
-              <option key={d.district_code} value={d.district_code}>{d.district}</option>
+              <option key={d.district_code} value={d.district_code}>
+                {d.district}
+              </option>
             ))}
           </select>
+        </div>
 
           <button
             onClick={() => setShowDetail(true)}
@@ -164,9 +297,9 @@ const isMapReady =
               Memuat chart…
             </div>
           ) : (
-          <div className="flex-1">
-            <Bar data={chartData} options={chartOptions} />
-          </div>
+            <div className="flex-1">
+              <Bar data={chartData} options={chartOptions} />
+            </div>
           )}
         </div>
 
@@ -178,12 +311,18 @@ const isMapReady =
 
           <div className="h-[420px]">
             {isMapReady && (
-              <PetaSuaraMap
-                apiBase={import.meta.env.VITE_API_URL}
+              <KelurahanMap
                 geoCity={geoCity}
                 geoDistrict={geoDistrict}
                 geoVillage={geoVillage}
                 geoSeribu={geoSeribu}
+                suaraKota={suaraKota}
+                suaraKecamatan={suaraKecamatan}
+                suaraKelurahan={suaraKelurahan}
+                selectedCityName={selectedCityName}
+                selectedDistrictName={selectedDistrictName}
+                onRegionClick={handleMapClick}
+                onLevelChange={handleLevelChange}
               />
             )}
           </div>

@@ -1,25 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bar } from "react-chartjs-2";
 import api from "../../../lib/axios";
 import MapPartai from "./mapPartai";
 import { createPortal } from "react-dom";
-
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Tooltip,
-  Legend,
-} from "chart.js";
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Tooltip,
-  Legend
-);
+import ReactECharts from "echarts-for-react";
+import { Icon } from "@iconify/react";
 
 /* ======================
    SINGKATAN PARTAI
@@ -77,10 +61,11 @@ export default function PartaiIndex() {
   ====================== */
   const [cities, setCities] = useState([]);
   const [districts, setDistricts] = useState([]);
-  const [data, setData] = useState([]);
 
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedDistrict, setSelectedDistrict] = useState("");
+  const [selectedCityName, setSelectedCityName] = useState("");     // For map filtering (city level)
+  const [selectedDistrictName, setSelectedDistrictName] = useState(""); // For map filtering (district level)
 
   /* ======================
      STATE DATA
@@ -132,14 +117,113 @@ export default function PartaiIndex() {
       .finally(() => setLoading(false));
   }, [selectedCity, selectedDistrict]);
 
-useEffect(() => {
-  api.get("/peta/partai/kecamatan").then((res) => {
-    console.log("API RESPONSE:", res.data);
+  /* ======================
+     GEOJSON - Load semua 3 level
+  ====================== */
+  const [geoCity, setGeoCity] = useState(null);
+  const [geoDistrict, setGeoDistrict] = useState(null);
+  const [geoVillage, setGeoVillage] = useState(null);
+  const [geoSeribu, setGeoSeribu] = useState(null);
 
-    // ⬇️ AMAN UNTUK SEMUA FORMAT
-    setData(Array.isArray(res.data) ? res.data : res.data.data ?? []);
-  });
-}, []);
+  useEffect(() => {
+    fetch("/data/id31_dki_jakarta.geojson").then((r) => r.json()).then(setGeoCity);
+    fetch("/data/district.geojson").then((r) => r.json()).then(setGeoDistrict);
+    fetch("/data/id31_dki_jakarta_village.geojson").then((r) => r.json()).then(setGeoVillage);
+    fetch("/data/id31_dki_jakarta_kepseribu.geojson").then((r) => r.json()).then(setGeoSeribu);
+  }, []);
+
+  /* ======================
+     DATA - API Suara
+  ====================== */
+  const [petaDataKota, setPetaDataKota] = useState([]);
+  const [petaDataKecamatan, setPetaDataKecamatan] = useState([]);
+
+  useEffect(() => {
+    api.get("/peta/partai/kota").then((res) => setPetaDataKota(res.data.data || []));
+    api.get("/peta/partai/kecamatan").then((res) => setPetaDataKecamatan(res.data.data || []));
+  }, []);
+
+  /* ======================
+     DATA PROCESSING
+  ====================== */
+  const normalize = (str = "") =>
+    str
+      .toString()
+      .toUpperCase()
+      .replace(/[^A-Z]/g, "");
+
+  const suaraKota = useMemo(() => {
+    const o = {};
+    petaDataKota.forEach((d) => {
+      if (!d.city || !d.winner_party) return;
+      o[normalize(d.city)] = d;
+    });
+    return o;
+  }, [petaDataKota]);
+
+  const suaraKecamatan = useMemo(() => {
+    const o = {};
+    petaDataKecamatan.forEach((d) => {
+      if (!d.district || !d.winner_party) return;
+      o[normalize(d.district)] = d;
+    });
+    return o;
+  }, [petaDataKecamatan]);
+
+  // Build district-to-city mapping from API data
+  const districtToCity = useMemo(() => {
+    const mapping = {};
+    petaDataKecamatan.forEach((d) => {
+      if (d.district && d.city) {
+        mapping[normalize(d.district)] = normalize(d.city);
+      }
+    });
+    return mapping;
+  }, [petaDataKecamatan]);
+
+  const isMapReady =
+    geoCity &&
+    geoDistrict &&
+    (Object.keys(suaraKota).length > 0 ||
+      Object.keys(suaraKecamatan).length > 0);
+
+  /* =========================================
+     HANDLE MAP CLICK
+  ========================================= */
+  const handleMapClick = (name, level) => {
+    const raw = normalize(name);
+
+    if (level === "kota") {
+      // Find city by name and set selectedCity
+      const found = cities.find((c) => normalize(c.city) === raw);
+      if (found) {
+        setSelectedCity(found.city_code);
+        setSelectedDistrict("");
+        setSelectedCityName(name);
+        setSelectedDistrictName(""); // Clear district filter when city is clicked
+      }
+    } else if (level === "kecamatan") {
+      // Find district by name and set selectedDistrict
+      const found = districts.find((d) => normalize(d.district) === raw);
+      if (found) {
+        setSelectedDistrict(found.district_code);
+        setSelectedDistrictName(name); // Set for single district highlighting
+      }
+    }
+  };
+
+  /* =========================================
+     HANDLE LEVEL CHANGE (zoom out reset)
+  ========================================= */
+  const handleLevelChange = (level) => {
+    // When zoomed out to city level, reset selections
+    if (level === "kota") {
+      setSelectedCity("");
+      setSelectedDistrict("");
+      setSelectedCityName("");
+      setSelectedDistrictName("");
+    }
+  };
 
   /* ======================
      CHART PREP
@@ -160,31 +244,82 @@ useEffect(() => {
     ),
     [chartRows]
   );
+// helper biar warna lebih soft
+const soften = (hex = "#94a3b8") => `${hex}CC`;
 
-  const chartData = {
-    labels,
-    datasets: [{ data: values, backgroundColor: colors }],
-  };
+const echartOption = useMemo(() => ({
+  tooltip: {
+    trigger: "axis",
+    axisPointer: {
+      type: "shadow",
+      shadowStyle: {
+        color: "rgba(0,0,0,0.04)",
+      },
+    },
+    backgroundColor: "#0f172a",
+    textStyle: { color: "#fff" },
+    padding: [8, 12],
+    formatter: (params) => {
+      const p = params[0];
+      return `
+        <div style="font-size:12px;opacity:.8">${p.name}</div>
+        <div style="font-size:16px;font-weight:600">
+          ${p.value.toLocaleString("id-ID")}
+        </div>
+      `;
+    },
+  },
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: (ctx) =>
-            `${ctx.label}: ${ctx.raw.toLocaleString("id-ID")}`,
+  grid: {
+    left: 50,
+    right: 20,
+    top: 20,
+    bottom: 70,
+  },
+
+  xAxis: {
+    type: "category",
+    data: labels,
+    axisLabel: {
+      interval: 0,
+      rotate: 30,
+      color: "#64748b",
+    },
+  },
+
+  yAxis: {
+    type: "value",
+    axisLabel: {
+      formatter: (v) => v.toLocaleString("id-ID"),
+      color: "#64748b",
+    },
+    splitLine: {
+      lineStyle: { color: "#e5e7eb" },
+    },
+  },
+
+  series: [
+    {
+      type: "bar",
+      barMaxWidth: 42,
+      emphasis: {
+        focus: "series", // ⬅️ BAR LAIN FADED SAAT HOVER
+      },
+      data: values.map((v, i) => ({
+        value: v,
+        itemStyle: {
+          color: soften(colors[i]),
+          borderRadius: [6, 6, 0, 0],
         },
-      },
+        emphasis: {
+          itemStyle: {
+            color: colors[i], // hover = solid
+          },
+        },
+      })),
     },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: { callback: v => v.toLocaleString("id-ID") },
-      },
-    },
-  };
+  ],
+}), [labels, values, colors]);
 
   return (
     <div className="space-y-4">
@@ -196,12 +331,31 @@ useEffect(() => {
         </h1>
 
         <div className="flex flex-col md:flex-row gap-3">
+
+        {/* FILTER KOTA */}
+        <div className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 bg-white">
+          <Icon
+            icon="mdi:office-building"
+            className="text-slate-500 w-5 h-5 shrink-0"
+          />
           <select
-            className="border rounded-lg px-4 py-2"
+            className="bg-transparent outline-none flex-1 cursor-pointer text-sm"
             value={selectedCity}
             onChange={(e) => {
-              setSelectedCity(e.target.value);
+              const cityCode = e.target.value;
+              setSelectedCity(cityCode);
               setSelectedDistrict("");
+
+              if (cityCode) {
+                const found = cities.find(c => c.city_code === cityCode);
+                if (found) {
+                  setSelectedCityName(found.city);
+                  setSelectedDistrictName("");
+                }
+              } else {
+                setSelectedCityName("");
+                setSelectedDistrictName("");
+              }
             }}
           >
             <option value="">Semua Kab/Kota (DKI)</option>
@@ -211,11 +365,30 @@ useEffect(() => {
               </option>
             ))}
           </select>
+        </div>
 
+        {/* FILTER KECAMATAN */}
+        <div className="flex items-center gap-2 border border-slate-300 rounded-lg px-3 py-2 bg-white">
+          <Icon
+            icon="mdi:map-marker-outline"
+            className="text-slate-500 w-5 h-5 shrink-0"
+          />
           <select
-            className="border rounded-lg px-4 py-2"
+            className="bg-transparent outline-none flex-1 cursor-pointer text-sm"
             value={selectedDistrict}
-            onChange={(e) => setSelectedDistrict(e.target.value)}
+            onChange={(e) => {
+              const districtCode = e.target.value;
+              setSelectedDistrict(districtCode);
+
+              if (districtCode) {
+                const found = districts.find(d => d.district_code === districtCode);
+                if (found) {
+                  setSelectedDistrictName(found.district);
+                }
+              } else {
+                setSelectedDistrictName("");
+              }
+            }}
           >
             <option value="">Semua Kecamatan</option>
             {districts.map(d => (
@@ -224,15 +397,21 @@ useEffect(() => {
               </option>
             ))}
           </select>
-
-          <button
-            onClick={() => setShowDetail(true)}
-            className="border border-blue-600 text-blue-600 rounded-lg px-4 py-2
-                       hover:bg-blue-600 hover:text-white transition md:ml-auto"
-          >
-            Detail
-          </button>
         </div>
+
+        {/* DETAIL BUTTON */}
+        <button
+          onClick={() => setShowDetail(true)}
+          className="
+            border border-blue-600 text-blue-600
+            rounded-lg px-4 py-2
+            hover:bg-blue-600 hover:text-white
+            transition
+          "
+        >
+          Detail
+        </button>
+      </div>
       </div>
 
       {/* ================= GRID CHART + MAP ================= */}
@@ -250,7 +429,10 @@ useEffect(() => {
             </div>
           ) : (
             <div className="flex-1">
-              <Bar data={chartData} options={chartOptions} />
+            <ReactECharts
+              option={echartOption}
+              style={{ width: "100%", height: "100%" }}
+            />
             </div>
           )}
         </div>
@@ -261,8 +443,20 @@ useEffect(() => {
             Peta Sebaran Pemenang Suara Partai
           </div>
 
-          <div className="h-[400px]">
-            <MapPartai data={data} />
+          <div className="h-[420px]">
+            {isMapReady && (
+              <MapPartai
+                geoCity={geoCity}
+                geoDistrict={geoDistrict}
+                geoSeribu={geoSeribu}
+                suaraKota={suaraKota}
+                suaraKecamatan={suaraKecamatan}
+                selectedCityName={selectedCityName}
+                selectedDistrictName={selectedDistrictName}
+                onRegionClick={handleMapClick}
+                onLevelChange={handleLevelChange}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -283,7 +477,7 @@ useEffect(() => {
               </h2>
 
               <table className="w-full text-sm">
-                <thead className="bg-slate-100 sticky top-0">
+                <thead className="bg-slate-100">
                   <tr>
                     <th className="px-4 py-2 text-left">Partai</th>
                     <th className="px-4 py-2 text-right">Total Suara</th>

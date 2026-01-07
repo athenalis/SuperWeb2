@@ -33,14 +33,14 @@ const PARTY_NAMES = {
   "100012": "PAN",
   "100013": "PBB",
   "100014": "DEMOKRAT",
-  "100015": "PSI",
-  "100016": "PERINDO",
+  "100015": "PSI",
+  "100016": "PERINDO",
   "100017": "PPP",
   "100024": "UMMAT",
 };
 
 /* =========================
-   MAIN
+   MAIN PAGE
 ========================= */
 
 export default function AnalisisPaslonIndex() {
@@ -56,7 +56,7 @@ export default function AnalisisPaslonIndex() {
   }, []);
 
   /* =========================
-     SUMMARY (ATAS)
+     SUMMARY ATAS
   ========================= */
   const summary = useMemo(() => {
     const total = data.length || 1;
@@ -76,7 +76,7 @@ export default function AnalisisPaslonIndex() {
   }, [data]);
 
   /* =========================
-     PASLON SUMMARY (CARD)
+     PASLON SUMMARY
   ========================= */
   const paslonSummary = useMemo(() => {
     const base = {
@@ -88,7 +88,6 @@ export default function AnalisisPaslonIndex() {
     data.forEach((d) => {
       if (!base[d.winner_paslon]) return;
       if (d.category === "Non-Partisan") return;
-
       base[d.winner_paslon][CATEGORY_MAP[d.category]]++;
     });
 
@@ -99,39 +98,45 @@ export default function AnalisisPaslonIndex() {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-lg font-semibold">
-        Analisis Pola Straight vs Split Ticket
-      </h1>
 
-      {/* ===== SUMMARY ATAS (JANGAN DIHAPUS) ===== */}
-      <div className="grid grid-cols-3 gap-4">
-        <SummaryCard
-          title="Straight Ticket"
-          percent={summary.straight}
-          count={summary.count.straight}
-          color="green"
-        />
-        <SummaryCard
-          title="Split Ticket"
-          percent={summary.split}
-          count={summary.count.split}
-          color="red"
-        />
-        <SummaryCard
-          title="Non-Partisan"
-          percent={summary.nonpartisan}
-          count={summary.count.nonpartisan}
-          color="yellow"
-        />
+      {/* ================= HEADER + SUMMARY ================= */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 md:p-6 space-y-4">
+        <h1 className="text-3xl font-bold text-blue-900">
+          Analisis Pola Straight vs Split Ticket
+        </h1>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SummaryCard
+            title="Straight Ticket"
+            percent={summary.straight}
+            count={summary.count.straight}
+            color="green"
+          />
+          <SummaryCard
+            title="Split Ticket"
+            percent={summary.split}
+            count={summary.count.split}
+            color="red"
+          />
+          <SummaryCard
+            title="Non-Partisan"
+            percent={summary.nonpartisan}
+            count={summary.count.nonpartisan}
+            color="yellow"
+          />
+        </div>
       </div>
 
-      {/* ===== MAP + PASLON ===== */}
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-7 bg-white border rounded">
+      {/* ================= MAP + PASLON ================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+        {/* MAP */}
+        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl overflow-hidden">
           <MapAnalisis data={data} />
         </div>
 
-        <div className="col-span-5 space-y-3">
+        {/* PASLON CARD */}
+        <div className="lg:col-span-5 space-y-4">
           {["01", "02", "03"].map((p) => (
             <PaslonCard
               key={p}
@@ -152,6 +157,7 @@ export default function AnalisisPaslonIndex() {
         </div>
       </div>
 
+      {/* ================= MODAL ================= */}
       {selectedPaslon && (
         <PaslonModal
           data={selectedPaslon}
@@ -168,16 +174,16 @@ export default function AnalisisPaslonIndex() {
 
 function SummaryCard({ title, percent, count, color }) {
   const map = {
-    green: "border-green-500 bg-green-50",
-    red: "border-red-500 bg-red-50",
-    yellow: "border-yellow-500 bg-yellow-50",
+    green: "border-emerald-500 bg-emerald-50",
+    red: "border-rose-500 bg-rose-50",
+    yellow: "border-amber-500 bg-amber-50",
   };
 
   return (
-    <div className={`border-l-4 p-4 rounded ${map[color]}`}>
-      <div className="text-sm text-gray-600">{title}</div>
-      <div className="text-2xl font-bold">{percent}%</div>
-      <div className="text-xs text-gray-500">{count} kecamatan</div>
+    <div className={`border-l-4 p-4 rounded-lg ${map[color]}`}>
+      <div className="text-sm text-slate-600">{title}</div>
+      <div className="text-2xl font-bold text-slate-800">{percent}%</div>
+      <div className="text-xs text-slate-500">{count} kecamatan</div>
     </div>
   );
 }
@@ -186,117 +192,152 @@ function PaslonCard({ code, data, onClick }) {
   return (
     <div
       onClick={onClick}
-      className="border rounded-lg p-4 bg-white hover:shadow cursor-pointer transition"
+      className="
+        group cursor-pointer
+        border border-slate-200 rounded-xl
+        p-5 bg-white
+        transition-all duration-200
+        hover:border-blue-500
+        hover:shadow-lg
+        active:scale-[0.99]
+      "
     >
-      <div className="font-semibold">Paslon {code}</div>
-      <div className="text-sm text-gray-600 mb-3">
-        {PASLON_NAMES[code]}
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <div className="font-semibold text-slate-800">
+            Paslon {code}
+          </div>
+          <div className="text-sm text-slate-500">
+            {PASLON_NAMES[code]}
+          </div>
+        </div>
+
+        {/* indikator klik */}
+        <span className="
+          text-slate-400
+          group-hover:text-blue-600
+          transition
+        ">
+          →
+        </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-sm">
-        <div className="bg-green-50 p-2 rounded">
-          <div className="text-gray-500">Straight</div>
-          <div className="font-semibold">{data.straight}</div>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="bg-emerald-50 p-3 rounded-lg">
+          <div className="text-slate-500">Straight</div>
+          <div className="font-semibold text-emerald-700 text-lg">
+            {data.straight}
+          </div>
         </div>
-        <div className="bg-red-50 p-2 rounded">
-          <div className="text-gray-500">Split</div>
-          <div className="font-semibold">{data.split}</div>
+
+        <div className="bg-rose-50 p-3 rounded-lg">
+          <div className="text-slate-500">Split</div>
+          <div className="font-semibold text-rose-700 text-lg">
+            {data.split}
+          </div>
         </div>
+      </div>
+
+      {/* hint kecil */}
+      <div className="
+        mt-3 text-xs text-slate-400
+        group-hover:text-blue-600
+        transition
+      ">
+        Klik untuk melihat detail
       </div>
     </div>
   );
 }
 
 /* =========================
-   MODAL (DROPDOWN KECAMATAN)
+   PASLON MODAL
 ========================= */
 
 function PaslonModal({ data, onClose }) {
   const [open, setOpen] = useState(null);
   const districts = data.districts || [];
 
-  const straight = districts.filter(
-    (d) => d.category === "Straight Ticket"
-  );
-  const split = districts.filter(
-    (d) => d.category === "Split Ticket"
-  );
+  const straight = districts.filter(d => d.category === "Straight Ticket");
+  const split = districts.filter(d => d.category === "Split Ticket");
 
- const renderDistrict = (d, i) => {
-  const key = `${d.district}-${i}`;
+  const renderDistrict = (d, i) => {
+    const key = `${d.district}-${i}`;
+
+    return (
+      <div key={key} className="border-b last:border-b-0">
+        <button
+          onClick={() => setOpen(open === key ? null : key)}
+          className="w-full flex justify-between px-4 py-2 text-sm hover:bg-slate-50"
+        >
+          <span className="font-medium">{d.district}</span>
+          <span>{open === key ? "▴" : "▾"}</span>
+        </button>
+
+        {open === key && (
+          <div className="px-4 py-4 bg-slate-50 text-sm space-y-4">
+                <div>
+                  <div className="font-semibold mb-2">Suara Paslon</div>
+
+                  <div className="border rounded-lg overflow-hidden bg-white">
+                    {Object.entries(d.votes_paslon).map(([code, votes], i, arr) => (
+                      <div
+                        key={code}
+                        className={`
+                          flex justify-between items-center
+                          px-3 py-2 text-sm
+                          ${i !== arr.length - 1 ? "border-b border-slate-200" : ""}
+                        `}
+                      >
+                        <span className="text-slate-700">
+                          {PASLON_NAMES[code]}
+                        </span>
+
+                        <span className="font-medium text-slate-900">
+                          {votes.toLocaleString("id-ID")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+            <hr />
+
+           <div>  
+              <div className="font-semibold mb-2">Suara Partai</div>
+
+              <div className="border rounded-lg overflow-hidden bg-white">
+                {Object.entries(d.party_votes).map(([code, votes], i, arr) => (
+                  <div
+                    key={code}
+                    className={`
+                      flex justify-between items-center
+                      px-3 py-2 text-sm
+                      ${i !== arr.length - 1 ? "border-b border-slate-200" : ""}
+                    `}
+                  >
+                    <span className="text-slate-700">
+                      {PARTY_NAMES[code]}
+                    </span>
+
+                    <span className="font-medium text-slate-900">
+                      {votes.toLocaleString("id-ID")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div key={key} className="border-b last:border-b-0">
-      <button
-        onClick={() => setOpen(open === key ? null : key)}
-        className="w-full flex justify-between items-center px-4 py-2 text-sm hover:bg-gray-50"
-      >
-        <span className="font-medium text-gray-800">
-          {d.district}
-        </span>
-        <span className="text-gray-500">
-          {open === key ? "▴" : "▾"}
-        </span>
-      </button>
-
-    {open === key && (
-  <div className="px-4 py-3 bg-gray-50 text-sm space-y-4">
-
-    {/* PASLON */}
-    <div>
-      <div className="font-semibold text-gray-700 mb-1">
-        Suara Paslon
-      </div>
-      <div className="space-y-1">
-        {Object.entries(d.votes_paslon)
-          .sort((a, b) => b[1] - a[1])
-          .map(([code, votes]) => (
-            <div key={code} className="flex justify-between">
-              <span>{PASLON_NAMES[code]}</span>
-              <span className="font-medium">
-                {votes.toLocaleString("id-ID")}
-              </span>
-            </div>
-          ))}
-      </div>
-    </div>
-
-    {/* PARTAI */}
-    <div>
-      <div className="font-semibold text-gray-700 mb-1">
-        Suara Partai
-      </div>
-      <div className="space-y-1">
-        {Object.entries(d.party_votes)
-          .sort((a, b) => b[1] - a[1])
-          .map(([code, votes]) => (
-            <div key={code} className="flex justify-between">
-              <span>{PARTY_NAMES[code]}</span>
-              <span className="font-medium">
-                {votes.toLocaleString("id-ID")}
-              </span>
-            </div>
-          ))}
-      </div>
-    </div>
-
-  </div>
-)}
-
-    </div>
-  );
-};
-
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
-      <div className="bg-white rounded-lg w-full max-w-lg p-5 max-h-[85vh] overflow-y-auto">
-        {/* HEADER */}
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6">
         <div className="flex justify-between mb-4">
           <div>
-            <div className="text-sm text-gray-500">
-              Paslon {data.code}
-            </div>
+            <div className="text-sm text-slate-500">Paslon {data.code}</div>
             <div className="font-semibold text-lg">
               {PASLON_NAMES[data.code]}
             </div>
@@ -304,80 +345,50 @@ function PaslonModal({ data, onClose }) {
           <button onClick={onClose} className="text-xl">×</button>
         </div>
 
-        {/* STRAIGHT CARD */}
-        <div className="border rounded-lg mb-4 bg-green-50 border-green-200">
-          <div className="px-4 py-3 bg-green-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-green-500 text-white flex items-center justify-center text-sm">
-                ✓
-              </span>
-              <div>
-                <div className="font-semibold text-green-800">
-                  Straight Ticket
-                </div>
-                <div className="text-xs text-green-700">
-                  Kecamatan dengan partai dominan sesuai koalisi
-                </div>
-              </div>
-            </div>
-            <span className="px-2 py-1 rounded-full text-xs bg-green-500 text-white">
-              {straight.length}
-            </span>
-          </div>
+        <Section title="Straight Ticket" color="green" count={straight.length}>
+          {straight.length ? straight.map(renderDistrict) : <Empty />}
+        </Section>
 
-          <div className="max-h-48 overflow-y-auto divide-y">
-            {straight.length ? (
-              straight.map(renderDistrict)
-            ) : (
-              <div className="px-4 py-3 text-sm text-gray-500 italic">
-                Tidak ada data
-              </div>
-            )}
-          </div>
-        </div>
+        <Section title="Split Ticket" color="red" count={split.length}>
+          {split.length ? split.map(renderDistrict) : <Empty />}
+        </Section>
 
-        {/* SPLIT CARD */}
-        <div className="border rounded-lg bg-red-50 border-red-200">
-          <div className="px-4 py-3 bg-red-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-sm">
-                ✕
-              </span>
-              <div>
-                <div className="font-semibold text-red-800">
-                  Split Ticket
-                </div>
-                <div className="text-xs text-red-700">
-                  Kecamatan dengan partai dominan berbeda
-                </div>
-              </div>
-            </div>
-            <span className="px-2 py-1 rounded-full text-xs bg-red-500 text-white">
-              {split.length}
-            </span>
-          </div>
-
-          <div className="max-h-48 overflow-y-auto divide-y">
-            {split.length ? (
-              split.map(renderDistrict)
-            ) : (
-              <div className="px-4 py-3 text-sm text-gray-500 italic">
-                Tidak ada data
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* FOOTER */}
-        <div className="text-right mt-5">
+        <div className="text-right mt-6">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+            className="px-4 py-2 bg-slate-200 rounded-lg hover:bg-slate-300"
           >
             Tutup
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Section({ title, color, count, children }) {
+  const map = {
+    green: "bg-emerald-100 text-emerald-800",
+    red: "bg-rose-100 text-rose-800",
+  };
+
+  return (
+    <div className="border rounded-lg mb-4">
+      <div className={`px-4 py-3 flex justify-between ${map[color]}`}>
+        <div className="font-semibold">{title}</div>
+        <span className="text-xs px-2 py-1 bg-black/10 rounded-full">
+          {count}
+        </span>
+      </div>
+      <div className="max-h-64 overflow-y-auto">{children}</div>
+    </div>
+  );
+}
+
+function Empty() {
+  return (
+    <div className="px-4 py-3 text-sm italic text-slate-500">
+      Tidak ada data
     </div>
   );
 }

@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Relawan;
 use App\Models\VisitForm;
 use App\Models\Coordinator;
+use App\Models\History;
 use Illuminate\Support\Str;
 use App\Helpers\PhoneHelper;
 use Illuminate\Http\Request;
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
 
 class RelawanController extends Controller
 {
@@ -155,10 +158,11 @@ class RelawanController extends Controller
                 'required',
                 'digits:16',
                 function ($attribute, $value, $fail) {
-                    $existsRelawan     = \App\Models\Relawan::where('nik', $value)->exists();
-                    $existsKoordinator = \App\Models\Coordinator::where('nik', $value)->exists();
 
-                    if ($existsRelawan || $existsKoordinator) {
+                    $relawanAktif = Relawan::where('nik', $value)->exists();
+                    $koordinatorAktif = Coordinator::where('nik', $value)->exists();
+
+                    if ($relawanAktif || $koordinatorAktif) {
                         $fail('NIK sudah terdaftar sebagai relawan atau koordinator');
                     }
                 }
@@ -551,5 +555,88 @@ public function export(Request $request)
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function checkNik(Request $request)
+    {
+        $request->validate([
+            'nik' => 'required|digits:16'
+        ]);
+
+        $relawan = Relawan::withTrashed()
+            ->with('user')
+            ->where('nik', $request->nik)
+            ->first();
+
+        // ✅ BELUM PERNAH ADA
+        if (!$relawan) {
+            return response()->json([
+                'exists' => false,
+            ], 200);
+        }
+
+        // 🔁 PERNAH ADA TAPI SOFT DELETE → RESTORE
+        if ($relawan->trashed()) {
+            return response()->json([
+                'exists'  => true,
+                'deleted' => true,
+                'message' => 'NIK pernah terdaftar sebagai relawan dan saat ini nonaktif',
+            ], 200);
+        }
+
+        // ⚠️ MASIH AKTIF
+        return response()->json([
+            'exists'  => true,
+            'deleted' => false,
+            'message' => 'NIK sudah terdaftar dan masih aktif',
+        ], 200);
+    }
+
+    public function restoreByNik(Request $request)
+    {
+        $request->validate([
+            'nik' => 'required|digits:16'
+        ]);
+
+        $relawan = Relawan::withTrashed()
+            ->with(['user' => fn ($q) => $q->withTrashed()])
+            ->where('nik', $request->nik)
+            ->firstOrFail();
+
+        DB::transaction(function () use ($relawan) {
+
+            if ($relawan->trashed()) {
+                $relawan->restore();
+            }
+
+            if ($relawan->user && $relawan->user->trashed()) {
+                $relawan->user->restore();
+            }
+        });
+
+        $actor = Auth::user();
+
+        History::create([
+            'user_id'     => $actor->id,
+            'role'        => $actor->role, // admin
+            'action'      => 'RESTORE',
+            'target_type' => 'relawan',
+            'target_name' => $relawan->nama,
+            'field'       => 'activate_nik',
+            'old_value'   => 'deleted',
+            'new_value'   => 'active',
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Relawan berhasil diaktifkan kembali',
+            'data' => [
+                'relawan' => $relawan,
+                'user' => $relawan->user ? [
+                    'email'    => $relawan->user->email,
+                    'password' => $relawan->user->plain_password,
+                ] : null
+            ]
+        ]);
     }
 }

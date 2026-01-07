@@ -180,8 +180,14 @@ export default function MapAnalisis({ data }) {
         ref={mapRef}
         center={[-6.2, 106.8]}
         zoom={11}
-        className="h-full w-full"
-        style={{ height: "520px", zIndex: 0 }}
+        className="
+          w-full
+          h-[380px]
+          sm:h-[450px]
+          md:h-[520px]
+          lg:h-[600px]
+        "
+        style={{ zIndex: 0 }}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 

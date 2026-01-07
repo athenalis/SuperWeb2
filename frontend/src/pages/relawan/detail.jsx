@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useState, useMemo } from "react";
+import { toast } from "react-hot-toast";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import api from "../../lib/axios";
 import { Icon } from "@iconify/react";
 
@@ -18,17 +19,34 @@ function formatDate(dateString) {
   });
 }
 
+function getStatusBadge(status) {
+  const config = {
+    pending: { label: "Pending", bg: "bg-amber-100 text-amber-700" },
+    accepted: { label: "Setuju", bg: "bg-green-100 text-green-700" },
+    rejected: { label: "Tolak", bg: "bg-red-100 text-red-700" },
+  };
+  const c = config[status] || { label: status, bg: "bg-slate-100 text-slate-700" };
+  return (
+    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${c.bg}`}>
+      {c.label}
+    </span>
+  );
+}
+
 /* =========================
    SUB COMPONENTS
 ========================= */
-function Section({ title, children }) {
+function Section({ title, children, action }) {
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <span className="w-1.5 h-6 bg-blue-900 rounded-full" />
-        <h2 className="text-lg font-semibold text-slate-800">
-          {title}
-        </h2>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="w-1.5 h-6 bg-blue-900 rounded-full" />
+          <h2 className="text-lg font-semibold text-slate-800">
+            {title}
+          </h2>
+        </div>
+        {action}
       </div>
       {children}
     </div>
@@ -63,115 +81,141 @@ function Field({ label, value, full = false }) {
 ========================= */
 export default function RelawanDetail() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [ormasList, setOrmasList] = useState([]);
   const role = localStorage.getItem("role");
 
-const ormasName =
-  ormasList.find(o => o.id === data.ormas_id)?.nama_ormas || "-";
-
+  const ormasName = useMemo(() => {
+    if (!data || !ormasList.length) return "-";
+    return ormasList.find(o => o.id === data.ormas_id)?.nama_ormas || "-";
+  }, [data, ormasList]);
 
   // GET DATA DETAIL
   useEffect(() => {
+    setNotFound(false);
     api.get(`/relawan/${id}`)
       .then(res => setData(res.data.data))
-      .catch(() => alert("Gagal memuat data"))
+      .catch((err) => {
+        if (err.response?.status === 404) {
+          setNotFound(true);
+          toast.error("Data relawan tidak ditemukan");
+        } else {
+          toast.error("Gagal memuat data relawan");
+        }
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
   useEffect(() => {
-  api.get("/ormas")
-    .then(res => setOrmasList(res.data.data))
-    .catch(() => setOrmasList([]));
-}, []);
+    api.get("/ormas")
+      .then(res => setOrmasList(res.data.data))
+      .catch(() => setOrmasList([]));
+  }, []);
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-400">
+        <Icon icon="svg-spinners:180-ring-with-bg" width="40" className="mb-3" />
+        <p>Memuat profil relawan...</p>
+      </div>
+    );
+  }
 
-  if (loading) return <p className="text-center py-10">Loading...</p>;
-  if (!data) return <p className="text-center py-10">Data tidak ditemukan</p>;
+  if (notFound || !data) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-400">
+        <Icon icon="mdi:account-off-outline" width="64" className="mb-4 opacity-30" />
+        <h3 className="text-xl font-bold text-slate-600 mb-2">Relawan Tidak Ditemukan</h3>
+        <p className="mb-6">Data relawan dengan ID tersebut tidak tersedia atau sudah dihapus.</p>
+        <button
+          onClick={() => navigate("/relawan")}
+          className="px-5 py-2 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition"
+        >
+          Kembali ke Daftar
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex justify-center">
-      <div className="w-full max-w-8xl bg-white rounded-xl shadow p-8 space-y-10">
+    <div className="flex justify-center px-2 sm:px-4">
+      <div className="w-full max-w-8xl bg-white rounded-xl shadow p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 lg:space-y-12">
 
-      <div className="relative pt-4">
-        {/* TITLE – CENTER BENERAN */}
-        <h1 className="text-4xl text-blue-900 font-bold mb-6 text-center">
-          Detail Relawan
-        </h1>
-
-        {/* EDIT BUTTON – TETAP KANAN */}
-        {role !== "admin" && (
-        <>
-        <button
-          onClick={() => navigate(`/relawan/${id}/edit`)}
-          title="Edit"
-          className="absolute right-0 top-1/2 -translate-y-1/2
-                    w-11 h-11 flex items-center justify-center
-                    rounded-lg border border-blue-900 text-blue-900
-                    hover:bg-blue-900 hover:text-white transition"
-        >
-          <Icon icon="solar:pen-outline" width={20} />
-        </button>
-        </>
-        )}
-      </div>
-
-        {/* INFORMASI */}
-        <Section title="Informasi Relawan">
-          <Grid>
-            <Field label="Nama" value={data.nama} />
-            <Field label="NIK" value={data.nik} />
-            <Field label="No HP" value={data.no_hp} />
-            <Field label="TPS" value={data.tps} />
-            <Field label="Ormas" value={ormasName} />
-            <Field label="Koordinator" value={data.koordinator?.nama || data.koordinator || "-"} />
-            <Field label="Alamat" value={data.alamat} />
-            <Field label="Email Login" value={data.user?.email} />
-          </Grid>
-
-        </Section>
-
-        {/* WILAYAH */}
-        <Section title="Wilayah Penugasan">
-          <Grid>
-            <Field label="Provinsi" value={data.province?.province} />
-            <Field label="Kota/Kabupaten" value={data.city?.city} />
-            <Field label="Kecamatan" value={data.district?.district} />
-            <Field label="Kelurahan" value={data.village?.village} />
-          </Grid>
-        </Section>
-
-        {/* STATUS */}
-        <Section title="Status">
-          <div className="border rounded-xl px-6 py-5">
-            <span
-              className={`inline-flex px-4 py-1.5 rounded-full text-sm font-semibold
-                ${data.status === "active"
-                  ? "bg-green-100 text-green-700"
-                  : "bg-red-100 text-red-700"
-                }`}
-            >
-              {data.status === "active" ? "Aktif" : "Tidak Aktif"}
-            </span>
+        <div className="relative pt-2 sm:pt-4 flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4 border-b pb-4 sm:pb-6 lg:pb-8">
+          <div className="text-center md:text-left">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-blue-900 leading-tight">
+              {data.nama}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">Detail Profil Relawan</p>
           </div>
-        </Section>
 
-        {/* ACTION BUTTONS */}
-        <div className="flex flex-wrap justify-end gap-3 pt-4">
-
-          {/* KEMBALI (TETAP TEXT) */}
-          <button
-            onClick={() => navigate("/relawan")}
-            className="px-5 py-2.5 rounded-lg
-                      bg-slate-200 text-slate-800 font-medium
-                      hover:bg-slate-300 transition"
-          >
-            Kembali
-          </button>
+          <div className="flex items-center gap-2 sm:gap-3 w-full md:w-auto">
+            {role !== "admin" && (
+              <button
+                onClick={() => navigate(`/relawan/${id}/edit`)}
+                className="flex-1 md:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 lg:px-5 py-2 sm:py-2.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm hover:bg-amber-100 transition-all shadow-sm"
+              >
+                <Icon icon="solar:pen-outline" width={16} className="sm:w-[18px] sm:h-[18px]" />
+                <span className="hidden sm:inline">Edit Profil</span>
+                <span className="sm:hidden">Edit</span>
+              </button>
+            )}
+            <button
+              onClick={() => navigate("/relawan")}
+              className="flex-1 md:flex-none px-3 sm:px-4 lg:px-5 py-2 sm:py-2.5 bg-slate-100 text-slate-600 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm hover:bg-slate-200 transition-all"
+            >
+              Kembali
+            </button>
+          </div>
         </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 lg:gap-10">
+          {/* LEFT COLUMN: BASIC INFO */}
+          <div className="lg:col-span-2 space-y-6 sm:space-y-8 lg:space-y-12">
+            <Section title="Informasi Personal">
+              <Grid>
+                <Field label="Nama Lengkap" value={data.nama} />
+                <Field label="NIK" value={data.nik} />
+                <Field label="Email" value={data.user?.email || "-"} />
+                <Field label="Nomor Telepon" value={data.no_hp} />
+                <Field label="TPS" value={data.tps} />
+                <Field label="Ormas" value={ormasName} />
+                <Field label="Koordinator" value={data.koordinator?.nama || data.koordinator || "-"} />
+                <Field label="Alamat Detail" value={data.alamat} full />
+              </Grid>
+            </Section>
+
+            <Section title="Wilayah Penugasan">
+              <Grid>
+                <Field label="Provinsi" value={data.province?.province} />
+                <Field label="Kota/Kabupaten" value={data.city?.city} />
+                <Field label="Kecamatan" value={data.district?.district} />
+                <Field label="Kelurahan" value={data.village?.village} />
+              </Grid>
+            </Section>
+          </div>
+
+          {/* RIGHT COLUMN: STATS & STATUS */}
+          <div className="space-y-4 sm:space-y-6 lg:space-y-8">
+            <div className="bg-slate-50 rounded-xl sm:rounded-2xl p-4 sm:p-5 lg:p-6 border border-slate-100 space-y-4 sm:space-y-6">
+              <h3 className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest">Status Akun</h3>
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${data.status === "active" ? "bg-green-500 animate-pulse" : "bg-red-500"}`}></div>
+                <span className="text-lg sm:text-xl font-bold text-slate-800">
+                  {data.status === "active" ? "Aktif" : "Tidak Aktif"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+
       </div>
     </div>
   );

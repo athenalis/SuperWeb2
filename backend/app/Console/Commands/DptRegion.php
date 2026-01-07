@@ -14,14 +14,15 @@ class DptRegion extends Command
     {
         $level = strtoupper($this->argument('level'));
 
-        if (!in_array($level, ['VILLAGE', 'DISTRICT'])) {
-            $this->error('Support level: village | district');
+        if (!in_array($level, ['VILLAGE', 'DISTRICT', 'CITY'])) {
+            $this->error('Support level: village | district | city');
             return;
         }
 
         $fileMap = [
             'VILLAGE'  => 'id31_dki_jakarta_village.geojson',
             'DISTRICT' => 'id31_dki_jakarta_district.geojson',
+            'CITY'     => 'id31_dki_jakarta.geojson',
         ];
 
         $file = storage_path('app/geojson/' . $fileMap[$level]);
@@ -47,6 +48,12 @@ class DptRegion extends Command
             'KOTA JAKARTA TIMUR'   => 'KOTA ADM. JAKARTA TIMUR',
             'KOTA JAKARTA SELATAN' => 'KOTA ADM. JAKARTA SELATAN',
             'KEPULAUAN SERIBU' => 'KAB. ADM. KEP. SERIBU',
+            'KOTA ADM. JAKARTA TIMUR'   => 'KOTA ADM. JAKARTA TIMUR',
+            'KOTA ADM. JAKARTA BARAT'   => 'KOTA ADM. JAKARTA BARAT',
+            'KOTA ADM. JAKARTA SELATAN' => 'KOTA ADM. JAKARTA SELATAN',
+            'KOTA ADM. JAKARTA UTARA'   => 'KOTA ADM. JAKARTA UTARA',
+            'KOTA ADM. JAKARTA PUSAT'   => 'KOTA ADM. JAKARTA PUSAT',
+            'ADM. KEP. SERIBU'          => 'KAB. ADM. KEP. SERIBU',
         ];
 
         return $map[$value] ?? $value;
@@ -121,21 +128,41 @@ class DptRegion extends Command
         $props    = $feature['properties'];
         $geometry = $feature['geometry'];
 
-        // skip
-        if (
-            stripos($props['district'], 'DANAU') !== false ||
-            ($level === 'VILLAGE' && stripos($props['village'], 'DANAU') !== false)
-        ) {
+        $province = $this->normalize(
+            $props['province'] 
+            ?? $props['WADMPR'] 
+            ?? 'DKI JAKARTA'
+        );
+
+        $cityRaw = $props['regency']
+            ?? $props['city']
+            ?? $props['WADMKK']
+            ?? null;
+
+        if (!$cityRaw) {
             return;
         }
 
-        $province = $this->normalize($props['province']);
-        $city     = $this->normalizeCity($props['regency']);
-        $district = $this->normalizeDistrict($props['district']);
+        $city = $this->normalizeCity($cityRaw);
 
-        $village = $level === 'VILLAGE'
-            ? $this->normalizeVillage($props['village'])
-            : null;
+        $district = null;
+        $village  = null;
+
+        if ($level === 'DISTRICT' || $level === 'VILLAGE') {
+            if (isset($props['district'])) {
+                if (stripos($props['district'], 'DANAU') !== false) {
+                    return;
+                }
+                $district = $this->normalizeDistrict($props['district']);
+            }
+        }
+
+        if ($level === 'VILLAGE') {
+            if (stripos($props['village'], 'DANAU') !== false) {
+                return;
+            }
+            $village = $this->normalizeVillage($props['village']);
+        }
 
         $areaKm2 = $this->calculateArea($geometry);
 

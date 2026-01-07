@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use App\Notifications\VisitSubmitted;
+use App\Notifications\VisitUpdated;
 use Exception;
 
 class KunjunganController extends Controller
@@ -27,8 +29,8 @@ class KunjunganController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'nama'         => 'required|string|max:255',
-                'nik'          => [
+                'nama' => 'required|string|max:255',
+                'nik' => [
                     'required',
                     'digits:16',
                     'unique:kunjungan_forms,nik',
@@ -43,22 +45,20 @@ class KunjunganController extends Controller
                     'date',
                     'before_or_equal:' . Carbon::now()->subYears(17)->format('Y-m-d'),
                 ],
-                'pendidikan'   => 'required|in:SD,SMP,SMA/SMK,D3,S1,S2+',
-                'pekerjaan'    => 'required|string|max:255',
-                'penghasilan'  => 'required|string|max:100',
-                'foto_ktp'     => 'required|image|mimes:jpg,jpeg,png|max:5120',
-                'alamat'       => 'required|string|min:10',
-                'latitude'     => 'required|numeric|between:-90,90',
-                'longitude'    => 'required|numeric|between:-180,180',
-                'offline_id'   => 'nullable|string|unique:kunjungan_forms,offline_id',
+                'pendidikan' => 'required|in:SD,SMP,SMA/SMK,D3,S1,S2+',
+                'pekerjaan' => 'required|string|max:255',
+                'penghasilan' => 'required|string|max:100',
+                'foto_ktp' => 'required|file|max:5120',
+                'alamat' => 'required|string|min:10',
+                'latitude' => 'nullable|numeric|between:-90,90',
+                'longitude' => 'nullable|numeric|between:-180,180',
+                'offline_id' => 'nullable|string|unique:kunjungan_forms,offline_id',
             ], [
                 'nik.unique' => 'NIK sudah terdaftar dalam sistem',
                 'nik.digits' => 'NIK harus 16 digit',
                 'nik.required' => 'NIK wajib diisi',
                 'tanggal.before_or_equal' => 'Umur minimal harus 17 tahun',
                 'alamat.min' => 'Alamat minimal 10 karakter',
-                'latitude.required' => 'Koordinat GPS diperlukan',
-                'longitude.required' => 'Koordinat GPS diperlukan',
                 'foto_ktp.required' => 'Foto KTP wajib dilampirkan',
                 'foto_ktp.image' => 'File harus berupa gambar',
                 'foto_ktp.mimes' => 'Format foto harus JPG, JPEG, atau PNG',
@@ -66,6 +66,10 @@ class KunjunganController extends Controller
             ]);
 
             if ($validator->fails()) {
+                Log::warning('Validation failed for store kunjungan', [
+                    'errors' => $validator->errors()->toArray(),
+                    'data' => $request->except(['foto_ktp'])
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Validasi gagal',
@@ -82,10 +86,13 @@ class KunjunganController extends Controller
                 }
 
                 // Simpan foto KTP dengan nama unik
-                $fileName = 'ktp_' . $request->nik . '_' . time() . '.' . $file->extension();
-                $fotoPath = $file->storeAs('ktp', $fileName, 'public');
+                $ext = $file->getClientOriginalExtension();
 
-                if (!$fotoPath) {
+                $fileName = 'ktp_' . $request->nik . '_' . time() . '.' . $ext;
+                $fotoPath = 'ktp/' . $fileName;
+                $stored = Storage::disk('public')->put($fotoPath, file_get_contents($file->getRealPath()));
+
+                if (!$stored) {
                     throw new Exception('Gagal menyimpan foto KTP');
                 }
 
@@ -118,24 +125,24 @@ class KunjunganController extends Controller
 
                 // Simpan data kunjungan
                 $kunjungan = VisitForm::create([
-                    'task_id'     => $task_id,
-                    'relawan_id'  => $relawan_id,
+                    'task_id' => $task_id,
+                    'relawan_id' => $relawan_id,
                     'campaign_id' => $campaign_id,
-                    'nama'        => $request->nama,
-                    'nik'         => $request->nik,
-                    'tanggal'     => $request->tanggal,
-                    'umur'        => \Carbon\Carbon::parse($request->tanggal)->age,
-                    'pendidikan'  => $request->pendidikan,
-                    'pekerjaan'   => $request->pekerjaan,
+                    'nama' => $request->nama,
+                    'nik' => $request->nik,
+                    'tanggal' => $request->tanggal,
+                    'umur' => \Carbon\Carbon::parse($request->tanggal)->age,
+                    'pendidikan' => $request->pendidikan,
+                    'pekerjaan' => $request->pekerjaan,
                     'penghasilan' => $request->penghasilan,
-                    'foto_ktp'    => $fotoPath,
-                    'alamat'      => $request->alamat,
-                    'latitude'    => $request->latitude,
-                    'longitude'   => $request->longitude,
-                    'offline_id'  => $request->offline_id,
-                    'status'      => 'draft',
+                    'foto_ktp' => $fotoPath,
+                    'alamat' => $request->alamat,
+                    'latitude' => $request->latitude,
+                    'longitude' => $request->longitude,
+                    'offline_id' => $request->offline_id,
+                    'status' => 'draft',
                     'status_verifikasi' => 'pending',
-                    'created_by'  => $user->id,
+                    'created_by' => $user->id,
                 ]);
 
                 // Otomatis buat record FamilyForm
@@ -238,17 +245,18 @@ class KunjunganController extends Controller
                 'pekerjaan' => 'nullable|string|max:255',
                 'pendidikan' => 'required|string',
                 'penghasilan' => 'required|string',
-                'foto_ktp' => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120'
+                'foto_ktp' => 'nullable|file|max:5120'
             ], [
                 'nama.required' => 'Nama anggota keluarga wajib diisi',
+                'nik.required' => 'NIK wajib diisi',
+                'nik.digits' => 'NIK harus 16 digit',
                 'tanggal_lahir.required' => 'Tanggal lahir wajib diisi',
                 'tanggal_lahir.date' => 'Format tanggal lahir tidak valid',
+                'tanggal_lahir.before_or_equal' => 'Umur minimal harus 17 tahun',
                 'hubungan.required' => 'Hubungan keluarga wajib dipilih',
                 'hubungan.in' => 'Hubungan keluarga tidak valid',
                 'pendidikan.required' => 'Pendidikan wajib diisi',
                 'penghasilan.required' => 'Penghasilan wajib diisi',
-                'foto_ktp.required' => 'Foto KTP anggota keluarga wajib dilampirkan',
-                'foto_ktp.image' => 'File harus berupa gambar',
                 'foto_ktp.max' => 'Ukuran foto maksimal 5MB'
             ]);
 
@@ -278,8 +286,10 @@ class KunjunganController extends Controller
             $fotoPath = null;
             if ($request->hasFile('foto_ktp')) {
                 $file = $request->file('foto_ktp');
-                $fileName = 'ktp_anggota_' . time() . '_' . uniqid() . '.' . $file->extension();
-                $fotoPath = $file->storeAs('ktp', $fileName, 'public');
+                $ext = $file->getClientOriginalExtension();
+                $fileName = 'ktp_anggota_' . time() . '_' . uniqid() . '.' . $ext;
+                $fotoPath = 'ktp/' . $fileName;
+                Storage::disk('public')->put($fotoPath, file_get_contents($file->getRealPath()));
             }
 
             $anggota = $familyForm->members()->create([
@@ -331,7 +341,7 @@ class KunjunganController extends Controller
     {
         DB::beginTransaction();
         try {
-            $kunjungan = VisitForm::with('familyForm.members')->find($kunjungan_id);
+            $kunjungan = VisitForm::with(['familyForm.members', 'relawan.koordinator.user'])->find($kunjungan_id);
 
             if (!$kunjungan) {
                 return response()->json([
@@ -376,6 +386,47 @@ class KunjunganController extends Controller
                     'ingin_memilih'
                 ])
             );
+
+            // Trigger Notification to Coordinator
+            try {
+                if ($kunjungan->relawan && $kunjungan->relawan->koordinator && $kunjungan->relawan->koordinator->user) {
+                    $coordinatorUser = $kunjungan->relawan->koordinator->user;
+
+                    // If already completed before, it's a revision/update -> Send VisitUpdated
+                    // If just completed now (wasCompleted is false), it's new -> Send VisitSubmitted
+                    // Note: We check if completed_at was set BEFORE this update. 
+                    // But we just updated it above. So we should have captured state before.
+                    // Let's refactor slightly to be safe, or assume if verified_by was previously set/rejected?
+                    // Actually, let's use the fact that we just set completed_at.
+                    // Better approach: Check if it WAS rejected before setting status to pending in line 355.
+                    // But we already updated it.
+
+                    // Alternative: VisitUpdated is already used in update() and updateAnggota().
+                    // Maybe we should just stick to that? 
+                    // But selesaikanKunjungan is the final step.
+
+                    // Let's check logic:
+                    // new VisitUpdated($kunjungan, auth()->user())
+                    // new VisitSubmitted($kunjungan, $kunjungan->relawan)
+
+                    // Logic: If it was previously rejected, it's a revision.
+                    // But we reset status to pending.
+                    // Effectively: We need to know if this is a "Create" or "Edit".
+
+                    // Hack: Check if created_at is significantly different from now? No.
+                    // Check if 'verified_at' or 'komentar_verifikasi' exists?
+                    // If `komentar_verifikasi` is not null, it was likely rejected/revised.
+
+                    if ($kunjungan->komentar_verifikasi) {
+                        $coordinatorUser->notify(new \App\Notifications\VisitUpdated($kunjungan, auth()->user()));
+                    } else {
+                        $coordinatorUser->notify(new VisitSubmitted($kunjungan, $kunjungan->relawan));
+                    }
+                }
+            } catch (\Exception $e) {
+                // Log and ignore notification error so it doesn't rollback transaction
+                Log::error('Failed to send VisitSubmitted notification', ['error' => $e->getMessage()]);
+            }
 
             DB::commit();
 
@@ -447,14 +498,79 @@ class KunjunganController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = VisitForm::with(['relawan', 'campaign', 'task', 'kepuasan', 'familyForm' => function ($q) {
-                $q->withCount('members');
-            }])
-                ->where('created_by', auth()->id());
+            $query = VisitForm::with([
+                'relawan:id,nama',
+                'familyForm' => function ($q) {
+                    $q->withCount('members')->with('members');
+                }
+            ]);
 
-            // Filter by status
-            if ($request->has('status')) {
-                $query->where('status', $request->status);
+            $user = auth()->user();
+
+            // Strict Role-Based Scoping
+            if ($user->role === 'relawan') {
+                // Only show data that belongs to this specific relawan
+                if ($user->relawan) {
+                    $query->where(function ($q) use ($user) {
+                        // Data must have this relawan_id AND be created by this user
+                        $q->where('relawan_id', $user->relawan->id)
+                            ->where('created_by', $user->id);
+                    });
+                } else {
+                    // If no relawan record, only show data created by this user
+                    $query->where('created_by', $user->id);
+                }
+            } elseif ($user->role === 'koordinator') {
+                if ($request->has('relawan_id')) {
+                    // Filter by specific relawan under koordinator
+                    $relawanId = $request->relawan_id;
+                    $targetRelawan = \App\Models\Relawan::find($relawanId);
+                    // Ensure this relawan belongs to koordinator
+                    if ($targetRelawan && $user->koordinator && $targetRelawan->koordinator_id === $user->koordinator->id) {
+                        $query->where('relawan_id', $relawanId);
+                    } else {
+                        // Unauthorized filter attempt usually - return empty
+                        $query->whereRaw('1 = 0');
+                    }
+                } else {
+                    // Default: show all from downstream relawans
+                    $koordinator = $user->koordinator;
+                    if ($koordinator) {
+                        $query->where(function ($subQ) use ($koordinator) {
+                            $subQ->whereHas('relawan', function ($rq) use ($koordinator) {
+                                $rq->where('koordinator_id', $koordinator->id);
+                            })
+                                // Include manually created by downstream users
+                                ->orWhereIn('created_by', function ($q) use ($koordinator) {
+                                    $q->select('users.id')
+                                        ->from('users')
+                                        ->join('relawans', 'relawans.user_id', '=', 'users.id')
+                                        ->where('relawans.koordinator_id', $koordinator->id);
+                                });
+                        });
+                    } else {
+                        $query->whereRaw('1 = 0');
+                    }
+                }
+            } elseif ($user->role === 'admin') {
+                // Admin can see all, but can optionally filter
+                if ($request->has('relawan_id')) {
+                    $query->where('relawan_id', $request->relawan_id);
+                }
+            } else {
+                // Fallback for unknown roles (e.g. saksi, guest, or broken role data)
+                // STRICT: ONLY SHOW DATA CREATED BY SELF
+                $query->where('created_by', $user->id);
+            }
+
+            // Filter by status_verifikasi (untuk filter di list kunjungan)
+            if ($request->has('status') && in_array($request->status, ['pending', 'accepted', 'rejected'])) {
+                $query->where('status_verifikasi', $request->status);
+            }
+
+            // Filter by status_verifikasi (alternatif param name)
+            if ($request->has('status_verifikasi')) {
+                $query->where('status_verifikasi', $request->status_verifikasi);
             }
 
             // Search
@@ -469,9 +585,60 @@ class KunjunganController extends Controller
             $kunjungan = $query->orderBy('created_at', 'desc')
                 ->paginate($request->per_page ?? 15);
 
+            // Fetch statistics with potential relawan_id filter
+            $relawanId = $request->relawan_id;
+            $statsQuery = VisitForm::query();
+
+            if (auth()->user()->role === 'relawan') {
+                $user = auth()->user();
+                $statsQuery->where(function ($sub) use ($user) {
+                    $sub->where('created_by', $user->id);
+                    if ($user->relawan) {
+                        $sub->orWhere('relawan_id', $user->relawan->id);
+                    }
+                });
+            } elseif (auth()->user()->role === 'koordinator') {
+                $koordinator = auth()->user()->koordinator;
+                if ($relawanId) {
+                    // Get user_id from relawan for created_by check
+                    $relawan = \App\Models\Relawan::find($relawanId);
+                    $userId = $relawan ? $relawan->user_id : null;
+
+                    $statsQuery->where(function ($subQ) use ($relawanId, $userId) {
+                        $subQ->where('relawan_id', $relawanId);
+                        if ($userId) {
+                            $subQ->orWhere('created_by', $userId);
+                        }
+                    });
+                } elseif ($koordinator) {
+                    $statsQuery->where(function ($subQ) use ($koordinator) {
+                        $subQ->whereHas('relawan', function ($rq) use ($koordinator) {
+                            $rq->where('koordinator_id', $koordinator->id);
+                        })
+                            ->orWhereIn('created_by', function ($q) use ($koordinator) {
+                                $q->select('users.id')
+                                    ->from('users')
+                                    ->join('relawans', 'relawans.user_id', '=', 'users.id')
+                                    ->where('relawans.koordinator_id', $koordinator->id);
+                            });
+                    });
+                } else {
+                    $statsQuery->whereRaw('1 = 0');
+                }
+            } elseif (auth()->user()->role === 'admin' && $relawanId) {
+                $statsQuery->where('relawan_id', $relawanId);
+            }
+
+            $stats = [
+                'total' => (clone $statsQuery)->count(),
+                'pending' => (clone $statsQuery)->where('status_verifikasi', 'pending')->count(),
+                'accepted' => (clone $statsQuery)->where('status_verifikasi', 'accepted')->count(),
+            ];
+
             return response()->json([
                 'success' => true,
-                'data'    => $kunjungan
+                'data' => $kunjungan,
+                'stats' => $stats
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -490,9 +657,18 @@ class KunjunganController extends Controller
                 return response()->json(['success' => false, 'message' => 'Data tidak ditemukan'], 404);
             }
 
+            // [LOGIC TAMBAHAN] Reset status verifikasi jika ditolak, agar bisa diverifikasi ulang
+            if ($kunjungan->status_verifikasi === 'rejected') {
+                $kunjungan->status_verifikasi = 'pending';
+                // Kita biarkan verified_by dan verified_at tetap ada sebagai history, atau null-kan?
+                // Lebih baik null-kan untuk menandakan "belum diverifikasi ulang"
+                $kunjungan->verified_by = null;
+                $kunjungan->verified_at = null;
+            }
+
             $validator = Validator::make($request->all(), [
-                'nama'         => 'required|string|max:255',
-                'nik'          => [
+                'nama' => 'required|string|max:255',
+                'nik' => [
                     'required',
                     'digits:16',
                     function ($attribute, $value, $fail) use ($id) {
@@ -509,13 +685,13 @@ class KunjunganController extends Controller
                     'date',
                     'before_or_equal:' . Carbon::now()->subYears(17)->format('Y-m-d'),
                 ],
-                'pendidikan'   => 'required|in:SD,SMP,SMA/SMK,D3,S1,S2+',
-                'pekerjaan'    => 'required|string|max:255',
-                'penghasilan'  => 'required|string|max:255',
-                'alamat'       => 'required|string',
-                'latitude'     => 'nullable',
-                'longitude'    => 'nullable',
-                'foto_ktp'     => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
+                'pendidikan' => 'required|in:SD,SMP,SMA/SMK,D3,S1,S2+',
+                'pekerjaan' => 'required|string|max:255',
+                'penghasilan' => 'required|string|max:255',
+                'alamat' => 'required|string',
+                'latitude' => 'nullable',
+                'longitude' => 'nullable',
+                'foto_ktp' => 'nullable|file|max:5120',
             ]);
 
             if ($validator->fails()) {
@@ -529,11 +705,35 @@ class KunjunganController extends Controller
                 if ($kunjungan->foto_ktp) {
                     Storage::disk('public')->delete($kunjungan->foto_ktp);
                 }
-                $path = $request->file('foto_ktp')->store('kunjungan/ktp', 'public');
+                $file = $request->file('foto_ktp');
+                $ext = $file->getClientOriginalExtension();
+                $fileName = 'ktp_' . $request->nik . '_' . time() . '.' . $ext;
+                $path = 'ktp/' . $fileName;
+                Storage::disk('public')->put($path, file_get_contents($file->getRealPath()));
                 $data['foto_ktp'] = $path;
             }
 
             $kunjungan->update($data);
+
+            // [NOTIFICATION LOGIC]
+            try {
+                $user = auth()->user();
+                $targetUser = null;
+
+                if ($user->role === 'relawan' && $kunjungan->relawan && $kunjungan->relawan->koordinator && $kunjungan->relawan->koordinator->user) {
+                    // Relawan update -> Notify Koordinator
+                    $targetUser = $kunjungan->relawan->koordinator->user;
+                } elseif ($user->role === 'koordinator' && $kunjungan->relawan && $kunjungan->relawan->user) {
+                    // Koordinator update -> Notify Relawan (Creator/Owner)
+                    $targetUser = $kunjungan->relawan->user;
+                }
+
+                if ($targetUser && $targetUser->id !== $user->id) {
+                    $targetUser->notify(new VisitUpdated($kunjungan, $user));
+                }
+            } catch (\Exception $e) {
+                Log::error('Failed to send VisitUpdated notification', ['error' => $e->getMessage()]);
+            }
 
             return response()->json([
                 'success' => true,
@@ -572,6 +772,50 @@ class KunjunganController extends Controller
                 $kunjungan->familyForm->delete();
             }
 
+
+            // [LOGIC TAMBAHAN] Hapus notifikasi terkait kunjungan ini
+            // Agar inbox koordinator tidak penuh dengan notifikasi sampah
+            try {
+                // Menggunakan LIKE agar lebih robust menangkap format angka maupun string di JSON
+                // Dan menangkap variasi key kujuangan_id atau visit_id
+                $id = $kunjungan->id;
+                $deletedCount = DB::table('notifications')
+                    ->where('data', 'LIKE', '%"visit_id":' . $id . '%')
+                    ->orWhere('data', 'LIKE', '%"visit_id": "' . $id . '"%') // With space
+                    ->orWhere('data', 'LIKE', '%"visit_id":"' . $id . '"%')  // String format
+                    ->orWhere('data', 'LIKE', '%"kunjungan_id":' . $id . '%')
+                    ->orWhere('data', 'LIKE', '%"kunjungan_id": "' . $id . '"%') // With space
+                    ->orWhere('data', 'LIKE', '%"kunjungan_id":"' . $id . '"%')  // String format
+                    ->delete();
+
+                Log::info("Deleted {$deletedCount} notifications for visit {$id} when deleting visit.");
+            } catch (\Exception $e) {
+                Log::error('Gagal menghapus notifikasi terkait', ['error' => $e->getMessage()]);
+            }
+
+            // [LOGIC TAMBAHAN] Kirim notifikasi "Kunjungan Dihapus" ke koordinator
+            // Jika yang menghapus adalah Relawan
+            try {
+                $userRole = auth()->user()->role;
+                Log::info("Deleting visit {$kunjungan->id}. User role: {$userRole}");
+
+                if ($userRole === 'relawan') {
+                    if ($kunjungan->relawan && $kunjungan->relawan->koordinator && $kunjungan->relawan->koordinator->user) {
+                        $coordUser = $kunjungan->relawan->koordinator->user;
+                        $coordUser->notify(new \App\Notifications\VisitDeleted(
+                            $kunjungan->nama, // Nama kepala keluarga
+                            $kunjungan->relawan->nama, // Nama relawan
+                            auth()->user()->role
+                        ));
+                        Log::info("Sent VisitDeleted notification to Coordinator ID: {$coordUser->id}");
+                    } else {
+                        Log::warning("Cannot send VisitDeleted: Missing relationship (Relawan->Koordinator->User). Relawan ID: {$kunjungan->relawan_id}");
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error('Gagal mengirim notifikasi VisitDeleted', ['error' => $e->getMessage()]);
+            }
+
             // Hapus jawaban kuisioner
             if ($kunjungan->kepuasan) {
                 $kunjungan->kepuasan->delete();
@@ -599,6 +843,16 @@ class KunjunganController extends Controller
                 return response()->json(['success' => false, 'message' => 'Anggota tidak ditemukan'], 404);
             }
 
+            // [LOGIC TAMBAHAN] Reset status verifikasi kunjungan (parent) jika ditolak
+            // Agar bisa diverifikasi ulang oleh koordinator
+            $kunjunganParent = $anggota->keluargaForm->kunjungan ?? null;
+            if ($kunjunganParent && $kunjunganParent->status_verifikasi === 'rejected') {
+                $kunjunganParent->status_verifikasi = 'pending';
+                $kunjunganParent->verified_by = null;
+                $kunjunganParent->verified_at = null;
+                $kunjunganParent->save();
+            }
+
             $validator = Validator::make($request->all(), [
                 'nama' => 'required|string|max:255',
                 'nik' => [
@@ -622,7 +876,7 @@ class KunjunganController extends Controller
                 'pekerjaan' => 'nullable|string|max:255',
                 'pendidikan' => 'required|string',
                 'penghasilan' => 'required|string',
-                'foto_ktp' => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120'
+                'foto_ktp' => 'nullable|file|max:5120'
             ]);
 
             if ($validator->fails()) {
@@ -636,11 +890,36 @@ class KunjunganController extends Controller
                 if ($anggota->foto_ktp) {
                     Storage::disk('public')->delete($anggota->foto_ktp);
                 }
-                $path = $request->file('foto_ktp')->store('kunjungan/anggota', 'public');
+                $file = $request->file('foto_ktp');
+                $ext = $file->getClientOriginalExtension();
+                $path = 'kunjungan/anggota/ktp_anggota_' . time() . '.' . $ext;
+                Storage::disk('public')->put($path, file_get_contents($file->getRealPath()));
                 $data['foto_ktp'] = $path;
             }
 
             $anggota->update($data);
+
+            // [NOTIFICATION LOGIC]
+            try {
+                if ($kunjunganParent) {
+                    $user = auth()->user();
+                    $targetUser = null;
+
+                    if ($user->role === 'relawan' && $kunjunganParent->relawan && $kunjunganParent->relawan->koordinator && $kunjunganParent->relawan->koordinator->user) {
+                        // Relawan update -> Notify Koordinator
+                        $targetUser = $kunjunganParent->relawan->koordinator->user;
+                    } elseif ($user->role === 'koordinator' && $kunjunganParent->relawan && $kunjunganParent->relawan->user) {
+                        // Koordinator update -> Notify Relawan (Creator/Owner)
+                        $targetUser = $kunjunganParent->relawan->user;
+                    }
+
+                    if ($targetUser && $targetUser->id !== $user->id) {
+                        $targetUser->notify(new VisitUpdated($kunjunganParent, $user));
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error('Failed to send VisitUpdated notification (Anggota)', ['error' => $e->getMessage()]);
+            }
 
             return response()->json([
                 'success' => true,
@@ -673,5 +952,151 @@ class KunjunganController extends Controller
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * VERIFIKASI KUNJUNGAN (KOORDINATOR ONLY)
+     * Setuju atau tolak dengan komentar revisi
+     */
+    public function verifikasi(Request $request, $id)
+    {
+        try {
+            $kunjungan = VisitForm::with(['relawan'])->findOrFail($id);
+
+            // Validasi koordinator hanya bisa verifikasi relawan yang dibawahi
+            $koordinator = auth()->user()->koordinator;
+            if ($koordinator && $kunjungan->relawan) {
+                if ($kunjungan->relawan->koordinator_id !== $koordinator->id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Anda tidak memiliki akses untuk memverifikasi kunjungan ini'
+                    ], 403);
+                }
+            }
+
+            $validator = Validator::make($request->all(), [
+                'status' => 'required|in:accepted,rejected,needs_revision',
+                'komentar' => 'nullable|string|max:500',
+            ], [
+                'status.required' => 'Status verifikasi wajib diisi',
+                'status.in' => 'Status harus accepted, rejected, atau needs_revision',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $kunjungan->status_verifikasi = $request->status;
+            $kunjungan->komentar_verifikasi = $request->komentar;
+            $kunjungan->verified_by = $koordinator ? $koordinator->id : null;
+            $kunjungan->verified_at = now();
+            $kunjungan->save();
+
+            // Kirim notifikasi ke relawan
+            if ($kunjungan->relawan && $kunjungan->relawan->user) {
+                if ($request->status === 'accepted') {
+                    $kunjungan->relawan->user->notify(new \App\Notifications\KunjunganVerified($kunjungan));
+                } elseif ($request->status === 'rejected') {
+                    $pesan = 'Kunjungan Anda ditolak: ' . ($request->komentar ?: 'Silakan revisi dan submit ulang');
+                    $kunjungan->relawan->user->notify(new \App\Notifications\KunjunganRejected($kunjungan, $pesan));
+                } elseif ($request->status === 'needs_revision') {
+                    $kunjungan->relawan->user->notify(new \App\Notifications\KunjunganNeedsRevision($kunjungan, $request->komentar));
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $request->status === 'accepted'
+                    ? 'Kunjungan berhasil diverifikasi'
+                    : ($request->status === 'needs_revision'
+                        ? 'Kunjungan ditandai perlu revisi'
+                        : 'Kunjungan ditolak dan perlu revisi'),
+                'data' => $kunjungan
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET NEXT BATCH for verification (round-robin)
+     */
+    public function getNextBatch()
+    {
+        $user = auth()->user();
+
+        if ($user->role !== 'koordinator' || !$user->koordinator) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $koordinatorId = $user->koordinator->id;
+        $cacheKey = "verifikasi_rr_{$koordinatorId}";
+        $lastRelawanId = \Illuminate\Support\Facades\Cache::get($cacheKey, 0);
+
+        // 1. Try to find next relawan (ID > last_id)
+        $nextRelawan = Relawan::where('koordinator_id', $koordinatorId)
+            ->where('id', '>', $lastRelawanId)
+            ->whereHas('visitForms', function ($q) {
+                $q->where('status_verifikasi', 'pending');
+            })
+            ->with([
+                'visitForms' => function ($q) {
+                    $q->where('status_verifikasi', 'pending')
+                        ->orderBy('created_at')
+                        ->limit(5);
+                }
+            ])
+            ->orderBy('id')
+            ->first();
+
+        // 2. Loop back to start if not found
+        if (!$nextRelawan) {
+            $nextRelawan = Relawan::where('koordinator_id', $koordinatorId)
+                ->whereHas('visitForms', function ($q) {
+                    $q->where('status_verifikasi', 'pending');
+                })
+                ->with([
+                    'visitForms' => function ($q) {
+                        $q->where('status_verifikasi', 'pending')
+                            ->orderBy('created_at')
+                            ->limit(5);
+                    }
+                ])
+                ->orderBy('id')
+                ->first();
+        }
+
+        if (!$nextRelawan) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tidak ada kunjungan pending yang perlu diverifikasi'
+            ]);
+        }
+
+        // Update Cache
+        \Illuminate\Support\Facades\Cache::put($cacheKey, $nextRelawan->id, now()->addDays(1));
+
+        // Count pending
+        $totalPending = $nextRelawan->visitForms()->where('status_verifikasi', 'pending')->count();
+        $batchCount = min(5, $totalPending);
+
+        // Send notification
+        $user->notify(new \App\Notifications\VerificationBatchReady(
+            $nextRelawan,
+            $batchCount
+        ));
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'relawan_id' => $nextRelawan->id,
+                'relawan_nama' => $nextRelawan->nama,
+                'count' => $batchCount,
+                'redirect_url' => "/kunjungan?relawan_id={$nextRelawan->id}&status=pending&batch=true&limit=5"
+            ]
+        ]);
     }
 }

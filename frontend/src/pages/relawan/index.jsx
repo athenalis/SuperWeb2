@@ -48,8 +48,6 @@ export default function Relawan() {
     tps: "",
   });
 
-  const [search, setSearch] = useState("");
-
   // FILTER YANG DIKIRIM KE API
   const [activeFilters, setActiveFilters] = useState({});
 
@@ -75,34 +73,59 @@ export default function Relawan() {
   // =====================
   // FETCH RELAWAN
   // =====================
-const fetchRelawan = async () => {
-  const res = await api.get("/relawan", {
-    params: {
-      page,
-      per_page: perPage,
-      search: search || undefined,
-      city_code: filters.city_code || undefined,
-      district_code: filters.district_code || undefined,
-      village_code: filters.village_code || undefined,
-    },
+  const fetchRelawan = async () => {
+    const res = await api.get("/relawan", {
+      params: activeFilters,
+    });
+    // Handle both paginated (res.data.data.data) and non-paginated (res.data.data) responses
+    const result = res.data.data;
+    if (Array.isArray(result)) return result;
+    return result?.data || [];
+  };
+
+  const {
+    data: relawan = [],
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["relawan", activeFilters],
+    queryFn: fetchRelawan,
   });
 
-  return res.data.data;
-};
+  useEffect(() => {
+    setPage(1);
+  }, [perPage, relawan, filters.nama, filters.nik, filters.tps]);
 
-const { data, isLoading, isError } = useQuery({
-  queryKey: ["relawan", page, perPage, search, filters],
-  queryFn: fetchRelawan,
-  keepPreviousData: true,
-});
+  const matchNama = (nama, keyword) => {
+    if (!keyword) return true;
+    return nama.toLowerCase().includes(keyword.toLowerCase().trim());
+  };
 
+  const matchNik = (nik, keyword) => {
+    if (!keyword) return true;
+    return String(nik).includes(keyword.trim());
+  };
 
-useEffect(() => {
-  setPage(1);
-}, [perPage, search, filters.city_code, filters.district_code, filters.village_code]);
+  const matchTps = (tps, keyword) => {
+    if (!keyword) return true;
+    const normalize = (val) => String(val).replace(/^0+/, "");
+    return normalize(tps) === normalize(keyword);
+  };
 
-  const paginatedData = data?.data ?? [];
-  const totalPage = data?.last_page ?? 1;
+  const semanticFiltered = relawan.filter((item) => {
+    return (
+      matchNama(item.nama ?? "", filters.nama) &&
+      matchNik(item.nik ?? "", filters.nik) &&
+      matchTps(item.tps ?? "", filters.tps)
+    );
+  });
+
+  const totalPage = Math.ceil(semanticFiltered.length / perPage);
+
+  const paginatedData = semanticFiltered.slice(
+    (page - 1) * perPage,
+    page * perPage
+  );
 
   const pages = Array.from({ length: totalPage }, (_, i) => i + 1);
 
@@ -114,7 +137,6 @@ useEffect(() => {
   };
 
   const resetFilter = () => {
-    setSearch("");
     setFilters({
       nik: "",
       nama: "",
@@ -314,10 +336,17 @@ useEffect(() => {
         {/* FILTER INPUT — ADMIN BOLEH */}
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
           <input
-            className="border px-5 py-3 rounded-lg md:col-span-2"
-            placeholder="Cari nama / NIK / no HP / TPS / wilayah"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            className="border border-gray-400 px-5 py-3 rounded-lg"
+            placeholder="Cari NIK..."
+            value={filters.nik}
+            onChange={(e) => setFilters({ ...filters, nik: e.target.value })}
+          />
+
+          <input
+            className="border border-gray-400 px-5 py-3 rounded-lg"
+            placeholder="Cari Nama..."
+            value={filters.nama}
+            onChange={(e) => setFilters({ ...filters, nama: e.target.value })}
           />
 
           {/* KOTA */}
@@ -379,6 +408,13 @@ useEffect(() => {
               ))}
             </select>
           </div>
+
+          <input
+            className="border border-gray-400 px-5 py-3 rounded-lg"
+            placeholder="Cari TPS..."
+            value={filters.tps}
+            onChange={(e) => setFilters({ ...filters, tps: e.target.value })}
+          />
         </div>
 
         <div className="flex justify-end gap-3">
@@ -416,7 +452,64 @@ useEffect(() => {
 
       {/* ================= TABLE ================= */}
       <div className="bg-white rounded-xl shadow overflow-hidden">
-        <table className="w-full text-base">
+        {/* ================= MOBILE CARD VIEW (< md) ================= */}
+        <div className="md:hidden space-y-4 px-4 pb-4">
+          {isLoading && <div className="text-center py-6">Loading...</div>}
+          {isError && <div className="text-center py-6 text-red-600">Gagal memuat data</div>}
+
+          {!isLoading && !isError && paginatedData.map((item) => (
+            <div key={item.id} className="bg-white border rounded-xl p-4 shadow-sm space-y-3">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900">{item.nama}</h3>
+                  <p className="text-sm text-gray-500">{item.nik}</p>
+                </div>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium shrink-0 ml-2 ${item.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                  {item.status === "active" ? "Aktif" : "Tidak Aktif"}
+                </span>
+              </div>
+
+              <div className="text-sm text-gray-600 space-y-1">
+                <div className="flex items-center gap-2">
+                  <Icon icon="mdi:map-marker-outline" width={16} className="text-gray-400 shrink-0" />
+                  <span>{item.village?.village || "-"}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Icon icon="mdi:office-building-marker-outline" width={16} className="text-gray-400 shrink-0" />
+                  <span>TPS {item.tps}</span>
+                </div>
+                {item.no_hp && (
+                  <div className="flex items-center gap-2">
+                    <Icon icon="mdi:phone-outline" width={16} className="text-gray-400 shrink-0" />
+                    <span>{item.no_hp}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-3 border-t flex items-center gap-2">
+                {role !== "admin" && (
+                  <button
+                    onClick={() => setDeleteTarget(item)}
+                    className="p-2 rounded-lg text-red-600 border border-red-200 hover:bg-red-50 shrink-0"
+                    title="Hapus"
+                  >
+                    <Icon icon="solar:trash-bin-trash-outline" width={20} />
+                  </button>
+                )}
+                <button
+                  onClick={() => navigate(`/relawan/${item.id}`)}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 text-blue-900 rounded-lg font-medium hover:bg-blue-100"
+                >
+                  <Icon icon="mdi:eye-outline" width={20} />
+                  <span>Detail</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ================= DESKTOP TABLE VIEW (>= md) ================= */}
+        <table className="w-full text-base hidden md:table">
           <thead className="bg-slate-100">
             <tr>
               <th className="px-5 py-4 text-left">Nama</th>
@@ -469,9 +562,12 @@ useEffect(() => {
                     )}
                     <button
                       onClick={() => navigate(`/relawan/${item.id}`)}
-                      className="text-blue-900 border border-blue-900 px-4 py-2 rounded-lg hover:bg-blue-800 hover:text-white"
+                      title="Detail"
+                      className="w-9 h-9 flex items-center justify-center
+                                text-blue-900 border border-blue-900
+                                rounded-lg hover:bg-blue-800 hover:text-white transition"
                     >
-                      Detail
+                      <Icon icon="mdi:eye-outline" width={20} />
                     </button>
                   </div>
                 </td>
@@ -804,3 +900,4 @@ useEffect(() => {
     </div>
   );
 }
+

@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -8,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 class PetaPartaiController extends Controller
 {
-    private array $partyColors = [
+   private array $partyColors = [
         100001 => '#0B6E3F',
         100002 => '#B71C1C',
         100003 => '#C40000',
@@ -30,16 +29,61 @@ class PetaPartaiController extends Controller
     ];
 
     /* ======================================
-       🔹 MAP PER KECAMATAN (BENAR)
+       🔹 MAP PER KOTA
+    ====================================== */
+    public function perKota()
+    {
+        $rows = PartyVote::select(
+                'city',
+                'party',
+                'party_code',
+                DB::raw('SUM(jumlah) as total_suara')
+            )
+            ->groupBy(
+                'city',
+                'party',
+                'party_code'
+            )
+            ->get();
+
+        $grouped = $rows->groupBy(fn ($r) =>
+            strtoupper(trim((string) $r->city))
+        );
+
+        $result = $grouped->map(function ($items) {
+            $city = $items->first()->city;
+            $winner = $items->sortByDesc('total_suara')->first();
+
+            return [
+                'city'         => $city,
+                'winner_party' => trim((string) $winner->party),
+                'winner_color' =>
+                    $this->partyColors[$winner->party_code] ?? '#9ca3af',
+                'parties' => $items->map(fn ($r) => [
+                    'party'  => trim($r->party),
+                    'jumlah' => (int) $r->total_suara,
+                ])->values(),
+            ];
+        })->values();
+
+        return response()->json([
+            'status' => 'success',
+            'level'  => 'kota',
+            'data'   => $result,
+        ]);
+    }
+
+    /* ======================================
+       🔹 MAP PER KECAMATAN
     ====================================== */
     public function perKecamatan()
     {
         $rows = PartyVote::select(
-            'district',
-            'party',
-            'party_code',
-            DB::raw('SUM(jumlah) as total_suara')
-        )
+                'district',
+                'party',
+                'party_code',
+                DB::raw('SUM(jumlah) as total_suara')
+            )
             ->groupBy(
                 'district',
                 'party',
@@ -47,9 +91,8 @@ class PetaPartaiController extends Controller
             )
             ->get();
 
-        $grouped = $rows->groupBy(
-            fn($r) =>
-            strtoupper(trim($r->district))
+        $grouped = $rows->groupBy(fn ($r) =>
+            strtoupper(trim((string) $r->district))
         );
 
         $result = $grouped->map(function ($items) {
@@ -59,11 +102,11 @@ class PetaPartaiController extends Controller
 
             return [
                 'district'     => $district,
-                'winner_party' => trim($winner->party),
+                'winner_party' => trim((string) $winner->party),
                 'winner_color' =>
-                $this->partyColors[$winner->party_code] ?? '#9ca3af',
+                    $this->partyColors[$winner->party_code] ?? '#9ca3af',
 
-                'parties' => $items->map(fn($r) => [
+                'parties' => $items->map(fn ($r) => [
                     'party'  => trim($r->party),
                     'jumlah' => (int) $r->total_suara,
                 ])->values(),
@@ -73,50 +116,6 @@ class PetaPartaiController extends Controller
         return response()->json([
             'status' => 'success',
             'level'  => 'district',
-            'data'   => $result,
-        ]);
-    }
-    public function perKota()
-    {
-        $rows = PartyVote::select(
-            'city',
-            'party',
-            'party_code',
-            DB::raw('SUM(jumlah) as total_suara')
-        )
-            ->groupBy(
-                'city',
-                'party',
-                'party_code'
-            )
-            ->get();
-
-        $grouped = $rows->groupBy(
-            fn($r) =>
-            strtoupper(trim($r->city))
-        );
-
-        $result = $grouped->map(function ($items) {
-
-            $city   = $items->first()->city;
-            $winner = $items->sortByDesc('total_suara')->first();
-
-            return [
-                'city'         => $city,
-                'winner_party' => trim($winner->party),
-                'winner_color' =>
-                $this->partyColors[$winner->party_code] ?? '#9ca3af',
-
-                'parties' => $items->map(fn($r) => [
-                    'party'  => trim($r->party),
-                    'jumlah' => (int) $r->total_suara,
-                ])->values(),
-            ];
-        })->values();
-
-        return response()->json([
-            'status' => 'success',
-            'level'  => 'city',
             'data'   => $result,
         ]);
     }
