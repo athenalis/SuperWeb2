@@ -294,6 +294,25 @@ export default function Relawan() {
     },
   });
 
+  const downloadTemplate = async () => {
+    try {
+      const res = await api.get("/relawan/template", {
+        responseType: "blob",
+      });
+
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.setAttribute("download", "template_relawan.xlsx");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      toast.error("Gagal mengunduh template");
+    }
+  };
+
   return (
     <div className="space-y-6">
 
@@ -731,10 +750,8 @@ export default function Relawan() {
               {/* DOWNLOAD TEMPLATE */}
               <button
                 className="w-full border border-blue-600 text-blue-600
-                     py-2.5 rounded-lg mb-7 hover:bg-blue-50"
-                onClick={() =>
-                  window.open("http://192.168.1.7:9000/api/relawan/template")
-                }
+                py-2.5 rounded-lg mb-7 hover:bg-blue-50"
+                onClick={downloadTemplate}
               >
                 Download Template Excel
               </button>

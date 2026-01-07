@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import api from "../../lib/axios";
 import { Icon } from "@iconify/react";
+import CameraCapture from "../../components/CameraCapture";
 
 const maxDate17 = () => {
   const d = new Date();
@@ -153,6 +154,7 @@ function Step1({ onNext }) {
   const [error, setError] = useState("");
   const [pekerjaanList, setPekerjaanList] = useState([]);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
 
   useEffect(() => {
     // Load persisted data
@@ -289,6 +291,13 @@ function Step1({ onNext }) {
     setError("");
   };
 
+  const handleCameraCapture = (file) => {
+    setForm(prev => ({ ...prev, fotoKtp: file }));
+    setPreviewUrl(URL.createObjectURL(file));
+    setError("");
+    toast.success("Foto KTP berhasil diambil");
+  };
+
   const handleSubmit = async () => {
     if (!isValid) {
       setError("Mohon lengkapi semua field yang wajib diisi");
@@ -392,14 +401,14 @@ function Step1({ onNext }) {
       <div>
         <label className="block font-semibold mb-2 text-sm md:text-base">Foto KTP <span className="text-red-500">*</span></label>
         <div
-          onClick={() => document.getElementById("fotoKtp").click()}
+          onClick={() => setShowCamera(true)}
           className="border-2 border-dashed rounded-xl p-4 md:p-8 text-center transition border-gray-300 cursor-pointer hover:border-blue-400 hover:bg-blue-50"
         >
           {!previewUrl ? (
             <div className="space-y-1 md:space-y-2 flex flex-col items-center justify-center text-center">
               <Icon icon="mdi:camera" className="text-4xl md:text-5xl text-gray-500" />
-              <p className="text-gray-600 font-medium text-sm md:text-base">Klik untuk ambil/upload foto KTP</p>
-              <p className="text-xs text-gray-400">Format JPG/PNG (max 5MB)</p>
+              <p className="text-gray-600 font-medium text-sm md:text-base">Klik untuk ambil foto KTP</p>
+              <p className="text-xs text-gray-400">Gunakan kamera untuk hasil terbaik</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -411,6 +420,17 @@ function Step1({ onNext }) {
             </div>
           )}
         </div>
+
+        <div className="mt-2 text-center">
+          <button
+            type="button"
+            onClick={() => document.getElementById("fotoKtp").click()}
+            className="text-sm text-blue-600 hover:text-blue-800 font-medium underline"
+          >
+            Atau upload dari galeri
+          </button>
+        </div>
+
         <input
           id="fotoKtp"
           type="file"
@@ -455,6 +475,7 @@ function Step1({ onNext }) {
         </div>
       </div>
       {showPermissionModal && <PermissionModal onRetry={handleRefreshGps} loading={loadingGps} />}
+      {showCamera && <CameraCapture onCapture={handleCameraCapture} onClose={() => setShowCamera(false)} />}
     </div>
   );
 }
@@ -464,6 +485,7 @@ function Step2({ kunjunganId, onNext, onBack }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [pekerjaanList, setPekerjaanList] = useState([]);
+  const [cameraMemberId, setCameraMemberId] = useState(null);
 
   useEffect(() => {
     fetchPekerjaan();
@@ -536,6 +558,14 @@ function Step2({ kunjunganId, onNext, onBack }) {
 
   const updateMember = (id, key, value) => {
     setMembers(members.map(m => m.id === id ? { ...m, [key]: value } : m));
+  };
+
+  const handleCameraCapture = (file) => {
+    if (!cameraMemberId) return;
+    updateMember(cameraMemberId, "fotoKtp", file);
+    updateMember(cameraMemberId, "previewUrl", URL.createObjectURL(file));
+    setCameraMemberId(null);
+    toast.success("Foto KTP berhasil diambil");
   };
 
   const handleSubmit = async () => {
@@ -697,18 +727,29 @@ function Step2({ kunjunganId, onNext, onBack }) {
             <div className="flex flex-col">
               <label className="block font-semibold mb-2 text-sm md:text-base">Foto KTP <span className="text-gray-400 text-xs md:text-sm font-normal">(Opsional)</span></label>
               <div
-                onClick={() => document.getElementById(`foto-member-${member.id}`).click()}
+                onClick={() => setCameraMemberId(member.id)}
                 className="flex-1 border-2 border-dashed rounded-2xl p-4 text-center transition border-gray-300 cursor-pointer hover:border-blue-400 hover:bg-blue-50 flex flex-col items-center justify-center min-h-[180px] md:min-h-[200px]"
               >
                 {!member.previewUrl ? (
                   <div className="space-y-1 md:space-y-2 flex flex-col items-center justify-center text-center">
                     <Icon icon="mdi:camera" className="text-4xl md:text-5xl text-gray-500" />
-                    <p className="text-xs text-gray-600 font-medium">Klik untuk upload foto</p>
+                    <p className="text-xs text-gray-600 font-medium">Klik untuk ambil foto</p>
                   </div>
                 ) : (
                   <img src={member.previewUrl} className="max-h-40 rounded-lg shadow-md" alt="Preview" />
                 )}
               </div>
+
+              <div className="mt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => document.getElementById(`foto-member-${member.id}`).click()}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium underline"
+                >
+                  Atau upload dari galeri
+                </button>
+              </div>
+
               <input
                 id={`foto-member-${member.id}`}
                 type="file"
@@ -743,6 +784,12 @@ function Step2({ kunjunganId, onNext, onBack }) {
         </Button>
 
       </div>
+      {cameraMemberId && (
+        <CameraCapture
+          onCapture={handleCameraCapture}
+          onClose={() => setCameraMemberId(null)}
+        />
+      )}
     </div>
   );
 }

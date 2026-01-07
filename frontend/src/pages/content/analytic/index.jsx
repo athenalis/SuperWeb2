@@ -106,8 +106,8 @@ export default function AnalyticContent() {
   }, [contentPlanId]);
 
   useEffect(() => {
-  setReportPage(1);
-}, [selectedPlatform]);
+    setReportPage(1);
+  }, [selectedPlatform]);
 
 
   /* =========================
@@ -452,6 +452,11 @@ export default function AnalyticContent() {
 
           <h3 className="font-semibold text-lg">
             Analisis Konten
+            {content?.title && (
+              <span className="text-slate-500 font-semibold">
+                {" "}{content.title}
+              </span>
+            )}
           </h3>
         </div>
 
@@ -701,44 +706,43 @@ export default function AnalyticContent() {
             </tbody>
           </table>
           {reportTotalPage > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
-            <span className="text-slate-500">
-              Halaman {reportPage} dari {reportTotalPage}
-            </span>
+            <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
+              <span className="text-slate-500">
+                Halaman {reportPage} dari {reportTotalPage}
+              </span>
 
-            <div className="flex gap-2">
-              <button
-                disabled={reportPage === 1}
-                onClick={() => setReportPage((p) => p - 1)}
-                className="px-3 py-1 border rounded-lg disabled:opacity-50"
-              >
-                Prev
-              </button>
-
-              {Array.from({ length: reportTotalPage }, (_, i) => i + 1).map((p) => (
+              <div className="flex gap-2">
                 <button
-                  key={p}
-                  onClick={() => setReportPage(p)}
-                  className={`px-3 py-1 border rounded-lg ${
-                    p === reportPage
-                      ? "bg-slate-900 text-white"
-                      : "hover:bg-slate-100"
-                  }`}
+                  disabled={reportPage === 1}
+                  onClick={() => setReportPage((p) => p - 1)}
+                  className="px-3 py-1 border rounded-lg disabled:opacity-50"
                 >
-                  {p}
+                  Prev
                 </button>
-              ))}
 
-              <button
-                disabled={reportPage === reportTotalPage}
-                onClick={() => setReportPage((p) => p + 1)}
-                className="px-3 py-1 border rounded-lg disabled:opacity-50"
-              >
-                Next
-              </button>
+                {Array.from({ length: reportTotalPage }, (_, i) => i + 1).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setReportPage(p)}
+                    className={`px-3 py-1 border rounded-lg ${p === reportPage
+                        ? "bg-slate-900 text-white"
+                        : "hover:bg-slate-100"
+                      }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+
+                <button
+                  disabled={reportPage === reportTotalPage}
+                  onClick={() => setReportPage((p) => p + 1)}
+                  className="px-3 py-1 border rounded-lg disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
         </div>
       )}
 

@@ -143,54 +143,78 @@ export default function Koordinator() {
     setVillages([]);
   };
 
-  // ================= EXPORT =================
-  const exportAllKoordinators = async () => {
-    if (!exportPassword) {
-      toast.error("Masukkan password terlebih dahulu");
-      return;
-    }
-
-    const toastId = "export-koordinator";
-
+  const downloadTemplate = async () => {
     try {
-      setExporting(true);
-      toast.loading("Menyiapkan file Excel...", { id: toastId });
-
-      const res = await api.post(
-        "/koordinator/export",
-        { password: exportPassword },
-        { responseType: "blob" }
-      );
+      const res = await api.get("/koordinator/template", {
+        responseType: "blob",
+      });
 
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
+
       link.href = url;
-      link.setAttribute("download", "koordinator_all.xlsx");
+      link.setAttribute("download", "template_koordinator.xlsx");
       document.body.appendChild(link);
       link.click();
       link.remove();
-
-      toast.success("Export berhasil", { id: toastId });
-
-      // ✅ TUTUP MODAL HANYA JIKA SUKSES
-      setShowPasswordModal(false);
-      setExportPassword("");
-      setShowExportPassword(false);
-
     } catch (err) {
-      if (err.response?.status === 403) {
-        // 🔐 PASSWORD SALAH
-        toast.error(err.response.data.message || "Password salah", {
-          id: toastId,
-        });
-      } else {
-        toast.error("Gagal export", { id: toastId });
-      }
-    } finally {
-      setExporting(false);
+      toast.error("Gagal mengunduh template");
     }
   };
 
+
+  // ================= EXPORT =================
+const exportAllKoordinators = async () => {
+  if (!exportPassword) {
+    toast.error("Masukkan password terlebih dahulu");
+    return;
+  }
+
+  const toastId = "export-koordinator";
+
+  try {
+    setExporting(true);
+    toast.loading("Menyiapkan file Excel...", { id: toastId });
+
+    const res = await api.post(
+      "/koordinator/export",
+      { password: exportPassword },
+      {
+        responseType: "blob",
+        validateStatus: (status) => status < 500, // ⬅️ INI KUNCI UTAMA
+      }
+    );
+
+    // 🧠 cek apakah ini file excel atau pesan error JSON
+    const contentType = res.headers["content-type"];
+
+    if (contentType?.includes("application/json")) {
+      const text = await res.data.text();
+      const data = JSON.parse(text);
+      throw new Error(data.message || "Export gagal");
+    }
+
+    // ✅ DOWNLOAD FILE
+    const url = window.URL.createObjectURL(res.data);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "koordinator_all.xlsx");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    toast.success("Export berhasil", { id: toastId });
+
+    setOpenExportModal(false);
+    setExportPassword("");
+    setShowPassword(false);
+
+  } catch (err) {
+    toast.error(err.message || "Gagal export", { id: toastId });
+  } finally {
+    setExporting(false);
+  }
+};
 
   // ================= IMPORT =================
   const importKoordinator = async () => {
@@ -726,10 +750,8 @@ export default function Koordinator() {
 
               <button
                 className="w-full border border-blue-600 text-blue-600
-                           py-2.5 rounded-lg mb-7 hover:bg-blue-50"
-                onClick={() =>
-                  window.open("http://192.168.1.7:9000/api/koordinator/template")
-                }
+                py-2.5 rounded-lg mb-7 hover:bg-blue-50"
+                onClick={downloadTemplate}
               >
                 Download Template Excel
               </button>

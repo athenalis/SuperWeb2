@@ -46,7 +46,7 @@ class DptController extends Controller
             [
                 'min'   => 0,
                 'max'   => 0,
-                'color' => '#ffffb2',
+                'color' => '#acacacff',
                 'label' => 'Tidak diklasifikasikan',
             ],
         ];
@@ -80,7 +80,7 @@ class DptController extends Controller
                 'label' => 'Prioritas Rendah (80 – 160 rb)',
             ],
             [
-                'min'   => 0,
+                'min'   => 1,
                 'max'   => 80000,
                 'color' => '#ffffb2',
                 'label' => 'Prioritas Sangat Rendah (0 – 80 rb)',
@@ -122,7 +122,7 @@ class DptController extends Controller
                 'label' => 'Prioritas Rendah (3 – 6 rb)',
             ],
             [
-                'min'   => 0,
+                'min'   => 1,
                 'max'   => 3000,
                 'color' => '#ffffb2',
                 'label' => 'Prioritas Sangat Rendah (0 – 3 rb)',
@@ -174,37 +174,21 @@ class DptController extends Controller
 
             $legend = $this->legendDensityVillage();
 
-            $rows = DB::table('regions as r')
-                ->leftJoin('dpt as d', function ($join) {
-                    $join->on('d.province', '=', 'r.province')
-                        ->on('d.city', '=', 'r.city')
-                        ->on('d.district', '=', 'r.district')
-                        ->on('d.village', '=', 'r.village');
-                })
-                ->where('r.level', 'VILLAGE')
+            $rows = DB::table('dpt_summary_villages as s')
+                ->join('villages as v', 'v.id', '=', 's.village_code')
+                ->join('districts as dct', 'dct.id', '=', 's.district_code')
+                ->join('cities as c', 'c.id', '=', 's.city_code')
+                ->join('provinces as p', 'p.id', '=', 's.province_code')
                 ->select(
-                    'r.province',
-                    'r.city',
-                    'r.district',
-                    'r.village',
-                    'r.area_km2',
-                    DB::raw('COUNT(d.id) as total_dpt'),
-                    DB::raw('
-                        CASE 
-                            WHEN r.area_km2 > 0 
-                            THEN ROUND(COUNT(d.id) / r.area_km2, 2)
-                            ELSE 0 
-                        END as density
-                    ')
+                    'p.province',
+                    'c.city',
+                    'dct.district',
+                    'v.village',
+                    's.area_km2',
+                    's.total_dpt',
+                    's.density'
                 )
-                ->groupBy(
-                    'r.province',
-                    'r.city',
-                    'r.district',
-                    'r.village',
-                    'r.area_km2'
-                )
-                ->orderByDesc('density')
+                ->orderByDesc('s.density')
                 ->get();
 
             $data = $rows->map(function ($item) use ($legend) {
@@ -239,34 +223,19 @@ class DptController extends Controller
 
             $legend = $this->legendDensityDistrict();
 
-            $rows = DB::table('regions as r')
-                ->leftJoin('dpt as d', function ($join) {
-                    $join->on('d.province', '=', 'r.province')
-                        ->on('d.city', '=', 'r.city')
-                        ->on('d.district', '=', 'r.district');
-                })
-                ->where('r.level', 'DISTRICT')
+            $rows = DB::table('dpt_summary_districts as s')
+                ->join('districts as dct', 'dct.id', '=', 's.district_code')
+                ->join('cities as c', 'c.id', '=', 's.city_code')
+                ->join('provinces as p', 'p.id', '=', 's.province_code')
                 ->select(
-                    'r.province',
-                    'r.city',
-                    'r.district',
-                    'r.area_km2',
-                    DB::raw('COUNT(d.id) as total_dpt'),
-                    DB::raw('
-                        CASE 
-                            WHEN r.area_km2 > 0 
-                            THEN ROUND(COUNT(d.id) / r.area_km2, 2)
-                            ELSE 0 
-                        END as density
-                    ')
+                    'p.province',
+                    'c.city',
+                    'dct.district',
+                    's.area_km2',
+                    's.total_dpt',
+                    's.density'
                 )
-                ->groupBy(
-                    'r.province',
-                    'r.city',
-                    'r.district',
-                    'r.area_km2'
-                )
-                ->orderByDesc('density')
+                ->orderByDesc('s.density')
                 ->get();
 
             $data = $rows->map(function ($item) use ($legend) {
@@ -301,31 +270,17 @@ class DptController extends Controller
 
             $legend = $this->legendDensityCity();
 
-            $rows = DB::table('regions as r')
-                ->leftJoin('dpt as d', function ($join) {
-                    $join->on('d.province', '=', 'r.province')
-                        ->on('d.city', '=', 'r.city');
-                })
-                ->where('r.level', 'CITY')
+            $rows = DB::table('dpt_summary_cities as s')
+                ->join('cities as c', 'c.id', '=', 's.city_code')
+                ->join('provinces as p', 'p.id', '=', 's.province_code')
                 ->select(
-                    'r.province',
-                    'r.city',
-                    'r.area_km2',
-                    DB::raw('COUNT(d.id) as total_dpt'),
-                    DB::raw('
-                        CASE 
-                            WHEN r.area_km2 > 0 
-                            THEN ROUND(COUNT(d.id) / r.area_km2, 2)
-                            ELSE 0 
-                        END as density
-                    ')
+                    'p.province',
+                    'c.city',
+                    's.area_km2',
+                    's.total_dpt',
+                    's.density'
                 )
-                ->groupBy(
-                    'r.province',
-                    'r.city',
-                    'r.area_km2'
-                )
-                ->orderByDesc('density')
+                ->orderByDesc('s.density')
                 ->get();
 
             $data = $rows->map(function ($item) use ($legend) {

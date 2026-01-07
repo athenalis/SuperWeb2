@@ -322,20 +322,21 @@ useEffect(() => {
 
 
       {/* ================= PER PAGE ================= */}
-      <div className="flex items-center gap-2 text-sm">
-        <span>Tampilkan</span>
-        <select
-          value={perPage}
-          onChange={(e) => setPerPage(Number(e.target.value))}
-          className="border rounded-lg px-3 py-1"
-        >
-          <option value={5}>5</option>
-          <option value={10}>10</option>
-          <option value={25}>25</option>
-          <option value={50}>50</option>
-        </select>
-        <span>data</span>
-      </div>
+    <div className="flex items-center gap-2 text-sm">
+      <span>Tampilkan</span>
+      <select
+        value={perPage}
+        onChange={(e) => setPerPage(Number(e.target.value))}
+        className="border rounded-lg px-3 py-1"
+      >
+        <option value={5}>5</option>
+        <option value={10}>10</option>
+        <option value={25}>25</option>
+        <option value={50}>50</option>
+      </select>
+      <span>data</span>
+    </div>
+
 
 
       {/* ================= TABLE ================= */}
