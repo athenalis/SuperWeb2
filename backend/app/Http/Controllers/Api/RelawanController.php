@@ -26,67 +26,61 @@ class RelawanController extends Controller
 {
 
     public function index(Request $request)
-{
-    $user = Auth::user();
-    $perPage = (int) ($request->per_page ?? 5);
+    {
+        $user = Auth::user();
+        $query = Relawan::with([
+            'province:province_code,province',
+            'city:city_code,city',
+            'district:district_code,district',
+            'village:village_code,village',
+            'koordinator:id,nama',
+        ])->withCount('visitForms');
 
-    $query = Relawan::with([
-        'province:province_code,province',
-        'city:city_code,city',
-        'district:district_code,district',
-        'village:village_code,village',
-        'koordinator:id,nama',
-    ])->withCount('visitForms');
-
-    // 🔐 BATAS KOORDINATOR
-    if ($user->role === 'koordinator') {
-        if (!$user->koordinator) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Akun koordinator belum terdaftar'
-            ], 403);
+        // 🔐 BATAS KOORDINATOR
+        if ($user->role === 'koordinator') {
+            if (!$user->koordinator) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Akun koordinator belum terdaftar'
+                ], 403);
+            }
+            $query->where('koordinator_id', $user->koordinator->id);
         }
 
-        $query->where('koordinator_id', $user->koordinator->id);
-    }
+        // 🔍 GLOBAL SEARCH
+        if ($request->filled('search')) {
+            $keyword = $request->search;
+            $query->where(function ($q) use ($keyword) {
+                $q->where('nama', 'like', "%{$keyword}%")
+                    ->orWhere('nik', 'like', "%{$keyword}%")
+                    ->orWhere('no_hp', 'like', "%{$keyword}%")
+                    ->orWhere('tps', 'like', "%{$keyword}%")
+                    ->orWhereHas('province', fn($qq) => $qq->where('province', 'like', "%{$keyword}%"))
+                    ->orWhereHas('city', fn($qq) => $qq->where('city', 'like', "%{$keyword}%"))
+                    ->orWhereHas('district', fn($qq) => $qq->where('district', 'like', "%{$keyword}%"))
+                    ->orWhereHas('village', fn($qq) => $qq->where('village', 'like', "%{$keyword}%"))
+                    ->orWhereHas('koordinator', fn($qq) => $qq->where('nama', 'like', "%{$keyword}%"));
+            });
+        }
 
-    // 🔍 GLOBAL SEARCH (SATU INPUT)
-    if ($request->filled('search')) {
-        $keyword = $request->search;
+        // 🌍 FILTER WILAYAH
+        if ($request->filled('city_code')) $query->where('city_code', $request->city_code);
+        if ($request->filled('district_code')) $query->where('district_code', $request->district_code);
+        if ($request->filled('village_code')) $query->where('village_code', $request->village_code);
 
-        $query->where(function ($q) use ($keyword) {
-            $q->where('nama', 'like', "%{$keyword}%")
-              ->orWhere('nik', 'like', "%{$keyword}%")
-              ->orWhere('no_hp', 'like', "%{$keyword}%")
-              ->orWhere('tps', 'like', "%{$keyword}%")
-              ->orWhereHas('province', fn ($qq) => $qq->where('province', 'like', "%{$keyword}%"))
-              ->orWhereHas('city', fn ($qq) => $qq->where('city', 'like', "%{$keyword}%"))
-              ->orWhereHas('district', fn ($qq) => $qq->where('district', 'like', "%{$keyword}%"))
-              ->orWhereHas('village', fn ($qq) => $qq->where('village', 'like', "%{$keyword}%"))
-              ->orWhereHas('koordinator', fn ($qq) => $qq->where('nama', 'like', "%{$keyword}%"));
-        });
-    }
+        // Tentukan apakah pakai pagination atau ambil semua
+        if ($request->filled('per_page')) {
+            $perPage = (int) $request->per_page;
+            $data = $query->orderByDesc('id')->paginate($perPage);
+        } else {
+            $data = $query->orderByDesc('id')->get();
+        }
 
-    // 🌍 FILTER WILAYAH
-    if ($request->filled('city_code')) {
-        $query->where('city_code', $request->city_code);
+        return response()->json([
+            'status' => true,
+            'data'   => $data
+        ]);
     }
-    if ($request->filled('district_code')) {
-        $query->where('district_code', $request->district_code);
-    }
-    if ($request->filled('village_code')) {
-        $query->where('village_code', $request->village_code);
-    }
-
-    $data = $query
-        ->orderByDesc('id')
-        ->paginate($perPage);
-
-    return response()->json([
-        'status' => true,
-        'data' => $data
-    ]);
-}
 
     public function show($id)
     {
@@ -386,102 +380,113 @@ class RelawanController extends Controller
                     'password' => $newPasswordPlain,
                 ]
             ]
-        ]);        
+        ]);
     }
 
-public function destroy($id)
-{
-    $user = Auth::user();
+    public function destroy($id)
+    {
+        $user = Auth::user();
 
-    $relawan = Relawan::with([
-        'village',
-        'district',
-        'city',
-        'koordinator',
-        'user'
-    ])->find($id);
+        $relawan = Relawan::with([
+            'village',
+            'district',
+            'city',
+            'koordinator',
+            'user'
+        ])->find($id);
 
-    if (!$relawan) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Relawan tidak ditemukan'
-        ], 404);
-    }
-
-    // 🔐 CEK HAK AKSES KOORDINATOR
-    if ($user->role === 'koordinator') {
-        if (
-            !$user->koordinator ||
-            $relawan->koordinator_id !== $user->koordinator->id
-        ) {
+        if (!$relawan) {
             return response()->json([
                 'status' => false,
-                'message' => 'Anda tidak berhak menghapus relawan ini'
-            ], 403);
+                'message' => 'Relawan tidak ditemukan'
+            ], 404);
         }
-    }
 
-    // ❗ CEK APAKAH RELAWAN MASIH PUNYA KUNJUNGAN
-    $visitCount = VisitForm::where('relawan_id', $relawan->id)->count();
-
-    if ($visitCount > 0) {
-        return response()->json([
-            'status' => false,
-            'message' => "Relawan ini masih mempunyai {$visitCount} data kunjungan"
-        ], 422);
-    }
-
-    // 🧾 LOG AKTIVITAS
-    $nama = $relawan->nama;
-    $wilayah = [
-        'kelurahan' => $relawan->village->village ?? null,
-        'kecamatan' => $relawan->district->district ?? null,
-        'kota'      => $relawan->city->city ?? null,
-    ];
-
-    ActivityLogger::log([
-        'action'      => 'DELETE',
-        'target_type' => 'relawan',
-        'target_name' => $nama,
-        'meta'        => $wilayah,
-    ]);
-
-    // 🧨 SOFT DELETE (AMAN)
-    DB::transaction(function () use ($relawan) {
-
-        // 1️⃣ Soft delete relawan
-        $relawan->delete();
-
-        // 2️⃣ Soft delete user (akun)
-        if ($relawan->user) {
-            $relawan->user->delete();
+        // 🔐 CEK HAK AKSES KOORDINATOR
+        if ($user->role === 'koordinator') {
+            if (
+                !$user->koordinator ||
+                $relawan->koordinator_id !== $user->koordinator->id
+            ) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Anda tidak berhak menghapus relawan ini'
+                ], 403);
+            }
         }
-    });
 
-    return response()->json([
-        'status'  => true,
-        'message' => 'Relawan berhasil dihapus'
-    ]);
-}
+        // ❗ CEK APAKAH RELAWAN MASIH PUNYA KUNJUNGAN
+        $visitCount = VisitForm::where('relawan_id', $relawan->id)->count();
 
-public function export(Request $request)
-{
-    $user = Auth::user();
-    $password = $request->password;
+        if ($visitCount > 0) {
+            return response()->json([
+                'status' => false,
+                'message' => "Relawan ini masih mempunyai {$visitCount} data kunjungan"
+            ], 422);
+        }
 
-    // cek password
-    if (!password_verify($password, $user->password)) {
+        // 🧾 LOG AKTIVITAS
+        $nama = $relawan->nama;
+        $wilayah = [
+            'kelurahan' => $relawan->village->village ?? null,
+            'kecamatan' => $relawan->district->district ?? null,
+            'kota'      => $relawan->city->city ?? null,
+        ];
+
+        ActivityLogger::log([
+            'action'      => 'DELETE',
+            'target_type' => 'relawan',
+            'target_name' => $nama,
+            'meta'        => $wilayah,
+        ]);
+
+        // 🧨 SOFT DELETE (AMAN)
+        DB::transaction(function () use ($relawan) {
+
+            // 1️⃣ Soft delete relawan
+            $relawan->delete();
+
+            // 2️⃣ Soft delete user (akun)
+            if ($relawan->user) {
+                $relawan->user->delete();
+            }
+        });
+
         return response()->json([
-            'message' => 'Password salah'
-        ], 422);
+            'status'  => true,
+            'message' => 'Relawan berhasil dihapus'
+        ]);
     }
 
-    if ($user->role === 'koordinator') {
-        $nama = str_replace(' ', '_', strtolower($user->koordinator->nama));
+    public function export(Request $request)
+    {
+        $user = Auth::user();
+        $password = $request->password;
+
+        // cek password
+        if (!password_verify($password, $user->password)) {
+            return response()->json([
+                'message' => 'Password salah'
+            ], 422);
+        }
+
+        if ($user->role === 'koordinator') {
+            $nama = str_replace(' ', '_', strtolower($user->koordinator->nama));
+
+            $response = Excel::download(
+                new RelawanExport('koordinator', $user->koordinator->id),
+                "relawan_{$nama}.xlsx"
+            );
+
+            $response->headers->set('Cache-Control', 'no-store, no-cache');
+            $response->headers->set('Access-Control-Expose-Headers', 'Content-Disposition');
+
+            return $response;
+        }
 
         $response = Excel::download(
-            new RelawanExport('koordinator', $user->koordinator->id),
-            "relawan_{$nama}.xlsx"
+            new RelawanExport('admin'),
+            'relawan_all.xlsx'
         );
 
         $response->headers->set('Cache-Control', 'no-store, no-cache');
@@ -489,17 +494,6 @@ public function export(Request $request)
 
         return $response;
     }
-
-    $response = Excel::download(
-        new RelawanExport('admin'),
-        'relawan_all.xlsx'
-    );
-
-    $response->headers->set('Cache-Control', 'no-store, no-cache');
-    $response->headers->set('Access-Control-Expose-Headers', 'Content-Disposition');
-
-    return $response;
-}
 
     public function import(Request $request)
     {
@@ -599,7 +593,7 @@ public function export(Request $request)
         ]);
 
         $relawan = Relawan::withTrashed()
-            ->with(['user' => fn ($q) => $q->withTrashed()])
+            ->with(['user' => fn($q) => $q->withTrashed()])
             ->where('nik', $request->nik)
             ->firstOrFail();
 

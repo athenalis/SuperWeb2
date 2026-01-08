@@ -23,58 +23,48 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CoordinatorController extends Controller
 {
-    public function index(Request $request)
-    {
-        $perPage = (int) ($request->per_page ?? 5);
+public function index(Request $request)
+{
+    $query = Coordinator::with([
+        'province:province_code,province',
+        'city:city_code,city',
+        'district:district_code,district',
+        'village:village_code,village',
+    ])->withCount('relawans');
 
-        $query = Coordinator::with([
-            'province:province_code,province',
-            'city:city_code,city',
-            'district:district_code,district',
-            'village:village_code,village',
-        ])->withCount('relawans');
-
-        if ($request->filled('search')) {
-            $keyword = $request->search;
-
-            $query->where(function ($q) use ($keyword) {
-                $q->where('nama', 'like', "%{$keyword}%")
-                ->orWhere('nik', 'like', "%{$keyword}%")
-                ->orWhere('no_hp', 'like', "%{$keyword}%")
-                ->orWhere('tps', 'like', "%{$keyword}%")
-
-                ->orWhereHas('province', function ($qq) use ($keyword) {
-                    $qq->where('province', 'like', "%{$keyword}%");
-                })
-                ->orWhereHas('city', function ($qq) use ($keyword) {
-                    $qq->where('city', 'like', "%{$keyword}%");
-                })
-                ->orWhereHas('district', function ($qq) use ($keyword) {
-                    $qq->where('district', 'like', "%{$keyword}%");
-                })
-                ->orWhereHas('village', function ($qq) use ($keyword) {
-                    $qq->where('village', 'like', "%{$keyword}%");
-                });
-            });
-        }
-
-        if ($request->filled('city_code')) {
-            $query->where('city_code', $request->city_code);
-        }
-        if ($request->filled('district_code')) {
-            $query->where('district_code', $request->district_code);
-        }
-        if ($request->filled('village_code')) {
-            $query->where('village_code', $request->village_code);
-        }
-
-        $data = $query->orderByDesc('id')->paginate($perPage);
-
-        return response()->json([
-            'status' => true,
-            'data' => $data
-        ]);
+    // Filter pencarian
+    if ($request->filled('search')) {
+        $keyword = $request->search;
+        $query->where(function ($q) use ($keyword) {
+            $q->where('nama', 'like', "%{$keyword}%")
+              ->orWhere('nik', 'like', "%{$keyword}%")
+              ->orWhere('no_hp', 'like', "%{$keyword}%")
+              ->orWhere('tps', 'like', "%{$keyword}%")
+              ->orWhereHas('province', fn($qq) => $qq->where('province', 'like', "%{$keyword}%"))
+              ->orWhereHas('city', fn($qq) => $qq->where('city', 'like', "%{$keyword}%"))
+              ->orWhereHas('district', fn($qq) => $qq->where('district', 'like', "%{$keyword}%"))
+              ->orWhereHas('village', fn($qq) => $qq->where('village', 'like', "%{$keyword}%"));
+        });
     }
+
+    // Filter wilayah
+    if ($request->filled('city_code')) $query->where('city_code', $request->city_code);
+    if ($request->filled('district_code')) $query->where('district_code', $request->district_code);
+    if ($request->filled('village_code')) $query->where('village_code', $request->village_code);
+
+    // Tentukan pagination atau ambil semua
+    if ($request->filled('per_page')) {
+        $perPage = (int) $request->per_page;
+        $data = $query->orderByDesc('id')->paginate($perPage);
+    } else {
+        $data = $query->orderByDesc('id')->get();
+    }
+
+    return response()->json([
+        'status' => true,
+        'data' => $data
+    ]);
+}
 
     public function show($id)
     {

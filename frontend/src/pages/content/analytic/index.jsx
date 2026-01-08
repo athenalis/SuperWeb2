@@ -3,6 +3,7 @@ import ReactECharts from "echarts-for-react";
 import { Icon } from "@iconify/react";
 import axios from "../../../lib/axios";
 import { useParams, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 
 /* =========================
    ICON MAPPING
@@ -74,8 +75,8 @@ export default function AnalyticContent() {
   });
 
   const [reportPage, setReportPage] = useState(1);
-  const reportPerPage = 5;
-
+  const [reportPerPage, setReportPerPage] = useState(5);
+  const hasInvalidMetric = Boolean(errors.views) || Boolean(errors.likes);
 
   /* =========================
      FETCH ANALYTICS
@@ -107,7 +108,7 @@ export default function AnalyticContent() {
 
   useEffect(() => {
     setReportPage(1);
-  }, [selectedPlatform]);
+  }, [selectedPlatform, reportPerPage]);
 
 
   /* =========================
@@ -154,12 +155,11 @@ export default function AnalyticContent() {
   const isDisabled = isNotPosted;
 
   /* =========================
-     VALIDATION
+     VALIDATION UPDATE
   ========================= */
-  const validateInput = (name, value) => {
+  const validateInput = (name, value, currentForm = form) => {
     if (!lastRecord) return "";
 
-    // ⬅️ INI PENTING
     if (value === "") return "";
 
     if (name === "views" && Number(value) < lastRecord.views) {
@@ -170,9 +170,17 @@ export default function AnalyticContent() {
       return "Jumlah Likes tidak boleh kurang dari jumlah sebelumnya";
     }
 
+    // Likes tidak boleh lebih besar dari Views
+    if (name === "likes" && Number(value) > Number(currentForm.views || 0)) {
+      return "Jumlah Likes tidak boleh lebih besar dari Views";
+    }
+
     return "";
   };
 
+  /* =========================
+     HANDLE CHANGE UNTUK TAMBAH
+  ========================= */
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -181,7 +189,7 @@ export default function AnalyticContent() {
       [name]: value,
     }));
 
-    const errorMsg = validateInput(name, value);
+    const errorMsg = validateInput(name, value, { ...form, [name]: value });
 
     setErrors((prev) => ({
       ...prev,
@@ -189,30 +197,66 @@ export default function AnalyticContent() {
     }));
   };
 
+
   /* =========================
-     SUBMIT
+     HANDLE CHANGE UNTUK EDIT
+  ========================= */
+  const handleEditChange = (name, value) => {
+    setEditData((prev) => ({ ...prev, [name]: value }));
+
+    const errorMsg = validateInput(name, value, { ...editData, [name]: value });
+
+    setErrors((prev) => ({
+      ...prev,
+      [name]: errorMsg,
+    }));
+
+    if (errorMsg) {
+      toast.error(errorMsg);
+    }
+  };
+
+  /* =========================
+     SUBMIT UPDATE
   ========================= */
   const handleSubmit = async () => {
-    if (!form.date || !form.views || !form.likes) return;
-
-    if (errors.views || errors.likes) {
-      alert("Periksa kembali data yang dimasukkan");
+    if (!form.date || !form.views || !form.likes) {
+      toast.error("Harap isi semua kolom");
       return;
     }
 
-    await axios.post(
-      `/content-plans/${contentPlanId}/analytics/record`,
-      {
-        platform_id: selectedPlatform,
-        recorded_at: form.date,
-        views: Number(form.views),
-        likes: Number(form.likes),
-      }
-    );
+    // ❌ Jangan submit jika ada error
+    if (errors.views || errors.likes) {
+      toast.error("Periksa kembali data yang dimasukkan");
+      return;
+    }
 
-    setForm({ date: "", views: "", likes: "" });
-    setErrors({ views: "", likes: "" });
-    fetchAnalytics();
+    // ❌ Tambahan safety check
+    if (Number(form.likes) > Number(form.views)) {
+      toast.error("Jumlah Likes tidak boleh lebih besar dari Views");
+      return;
+    }
+
+    try {
+      await axios.post(
+        `/content-plans/${contentPlanId}/analytics/record`,
+        {
+          platform_id: selectedPlatform,
+          recorded_at: form.date,
+          views: Number(form.views),
+          likes: Number(form.likes),
+        }
+      );
+
+      toast.success("Data berhasil ditambahkan");
+
+      setForm({ date: "", views: "", likes: "" });
+      setErrors({ views: "", likes: "" });
+      fetchAnalytics();
+    } catch (err) {
+      toast.error("Terjadi kesalahan saat menyimpan data");
+      console.error(err);
+    }
   };
 
   /* =========================
@@ -398,9 +442,6 @@ export default function AnalyticContent() {
     setIsEditOpen(false);
     fetchAnalytics();
   };
-
-  const hasInvalidMetric =
-    Boolean(errors.views) || Boolean(errors.likes);
 
   const reportData = reports[selectedPlatform]?.data || [];
 
@@ -598,10 +639,30 @@ export default function AnalyticContent() {
       {/* ===== TABLE REPORT ===== */}
       {selectedPlatform && reports[selectedPlatform] && (
         <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="bg-slate-100 px-4 py-3 font-semibold">
-            Report – {reports[selectedPlatform].platform_name}
-          </div>
+          <div className="bg-slate-100 px-4 py-3 flex items-center justify-between">
+            <span className="font-semibold">
+              Report – {reports[selectedPlatform].platform_name}
+            </span>
 
+            {/* FILTER PER PAGE */}
+            <div className="flex items-center gap-2 text-sm">
+              <span>Tampilkan</span>
+              <select
+                value={reportPerPage}
+                onChange={(e) => {
+                  setReportPerPage(Number(e.target.value));
+                  setReportPage(1);
+                }}
+                className="border rounded-lg px-2 py-1"
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+              <span>data</span>
+            </div>
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b">
               <tr>
@@ -725,8 +786,8 @@ export default function AnalyticContent() {
                     key={p}
                     onClick={() => setReportPage(p)}
                     className={`px-3 py-1 border rounded-lg ${p === reportPage
-                        ? "bg-slate-900 text-white"
-                        : "hover:bg-slate-100"
+                      ? "bg-slate-900 text-white"
+                      : "hover:bg-slate-100"
                       }`}
                   >
                     {p}
@@ -782,9 +843,7 @@ export default function AnalyticContent() {
                 <input
                   type="number"
                   value={editData.likes}
-                  onChange={(e) =>
-                    setEditData({ ...editData, likes: e.target.value })
-                  }
+                  onChange={(e) => handleEditChange("likes", e.target.value)}
                   className="w-full border rounded-lg px-3 h-[42px]"
                 />
               </div>
@@ -799,7 +858,7 @@ export default function AnalyticContent() {
               </button>
 
               <button
-                disabled={saving}
+                disabled={saving || hasInvalidMetric}
                 onClick={handleUpdate}
                 className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
               >

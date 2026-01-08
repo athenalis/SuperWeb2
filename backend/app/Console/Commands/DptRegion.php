@@ -66,7 +66,7 @@ class DptRegion extends Command
         $key = str_replace(' ', '', $value);
 
         $map = [
-            'GROGOL PETAMBURAN' => 'GROGOL PERTAMBURAN',
+            'GROGOLPETAMBURAN' => 'GROGOL PERTAMBURAN',
             'KRAMATJATI' => 'KRAMATJATI',
             'MAMPANGPRAPATAN' => 'MAMPANG PRAPATAN',
             'PULOGADUNG' => 'PULOGADUNG',

@@ -4,9 +4,7 @@ import { Icon } from "@iconify/react";
 import toast from "react-hot-toast";
 import axios from "../../lib/axios";
 
-/* =========================
-   HELPERS
-========================= */
+/* ========================= HELPERS ========================= */
 const formatCPLabel = (type) => {
   if (type === "phone") return "No. Telepon";
   if (type === "email") return "Email";
@@ -30,9 +28,7 @@ export function formatFollowers(num) {
   return num.toString();
 }
 
-/* =========================
-   MAIN COMPONENT
-========================= */
+/* ========================= MAIN COMPONENT ========================= */
 export default function CreateContent() {
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
@@ -41,6 +37,7 @@ export default function CreateContent() {
   const [loading, setLoading] = useState(false);
   const [openPlatform, setOpenPlatform] = useState(false);
   const [platforms, setPlatforms] = useState([]);
+  const [adsErrors, setAdsErrors] = useState({});
   const [contentTypesByPlatform, setContentTypesByPlatform] = useState({});
   const [form, setForm] = useState({
     title: "",
@@ -57,9 +54,7 @@ export default function CreateContent() {
     description: "",
   });
 
-  /* =========================
-     FETCH PLATFORMS
-  ========================== */
+  /* ========================= FETCH PLATFORMS ========================== */
   useEffect(() => {
     const fetchPlatforms = async () => {
       try {
@@ -73,9 +68,7 @@ export default function CreateContent() {
     fetchPlatforms();
   }, []);
 
-  /* =========================
-     FETCH CONTENT TYPES
-  ========================== */
+  /* ========================= FETCH CONTENT TYPES ========================== */
   useEffect(() => {
     const fetchContentTypes = async () => {
       try {
@@ -89,9 +82,7 @@ export default function CreateContent() {
     fetchContentTypes();
   }, []);
 
-  /* =========================
-     FETCH INFLUENCERS SESUAI PLATFORM
-  ========================== */
+  /* ========================= FETCH INFLUENCERS SESUAI PLATFORM ========================== */
   useEffect(() => {
     const fetchInfluencers = async () => {
       try {
@@ -108,9 +99,7 @@ export default function CreateContent() {
     if (form.platform_ids.length) fetchInfluencers();
   }, [form.platform_ids]);
 
-  /* =========================
-     OUTSIDE CLICK DROPDOWN
-  ========================== */
+  /* ========================= OUTSIDE CLICK DROPDOWN ========================== */
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -121,9 +110,7 @@ export default function CreateContent() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  /* =========================
-     DERIVED DATA
-  ========================== */
+  /* ========================= DERIVED DATA ========================== */
   const selectedPlatforms = form.platform_ids.map(Number);
 
   const showInfluencerSection = useMemo(() => {
@@ -139,9 +126,7 @@ export default function CreateContent() {
     );
   }, [selectedPlatforms, influencers]);
 
-  /* =========================
-     HANDLERS
-  ========================== */
+  /* ========================= HANDLERS ========================== */
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     if (type === "checkbox") {
@@ -193,24 +178,60 @@ export default function CreateContent() {
     }));
   };
 
+  const handleAdsChange = (platformId, field, value) => {
+    setForm(prev => {
+      const nextAds = {
+        ...prev.ads_by_platform,
+        [platformId]: {
+          ...(prev.ads_by_platform?.[platformId] || {}),
+          [field]: value
+        }
+      };
+
+      // VALIDASI REAL-TIME
+      const start = nextAds[platformId]?.start_date;
+      const end = nextAds[platformId]?.end_date;
+      const postingDate = prev.posting_date;
+
+      setAdsErrors(prevErr => {
+        const nextErr = { ...prevErr };
+
+        // 1) Start date tidak boleh kurang dari posting date
+        if (start && postingDate && start < postingDate) {
+          nextErr[platformId] = "Start Ads tidak boleh kurang dari tanggal posting";
+          toast.error("Start Ads tidak boleh kurang dari tanggal posting");
+        }
+        // 2) End date harus >= start date
+        else if (start && end && end < start) {
+          nextErr[platformId] = "Tanggal selesai ads harus sama atau setelah tanggal mulai";
+        }
+        else {
+          delete nextErr[platformId];
+        }
+
+        return nextErr;
+      });
+
+      return { ...prev, ads_by_platform: nextAds };
+    });
+  };
+
   const getPlatformLabel = (ids) => {
     if (!ids || !ids.length) return "Pilih platform";
-  
+
     const names = ids
       .map((id) => platforms.find((p) => Number(p.id) === Number(id))?.name)
       .filter(Boolean);
-  
+
     if (!names.length) return "Platform";
-  
+
     return names.join(", ");
-  };  
+  };
 
   const getPlatformName = (id) =>
     platforms.find((p) => Number(p.id) === Number(id))?.name || id;
 
-  /* =========================
-     VALIDATION
-  ========================== */
+  /* ========================= VALIDATION ========================== */
   const validate = () => {
     if (!form.title.trim()) return "Judul konten wajib diisi";
     if (!form.posting_date) return "Tanggal konten wajib diisi";
@@ -224,10 +245,37 @@ export default function CreateContent() {
     }
 
     if (form.is_ads) {
-      if (!form.ads_start_date) return "Tanggal mulai ads wajib diisi";
-      if (!form.ads_end_date) return "Tanggal selesai ads wajib diisi";
-      if (!form.budget_ads) return "Budget ads wajib diisi";
-      if (Number(form.budget_ads) <= 0) return "Budget ads harus lebih dari 0";
+      const ads = form.ads_by_platform || {};
+      let hasAnyAdsFilled = false;
+
+      for (const pid of selectedPlatforms) {
+        const a = ads[pid];
+        if (!a) continue;
+
+        const filledFields = [a.start_date, a.end_date, a.budget_ads].filter(Boolean);
+
+        // kalau salah satu diisi → wajib lengkap
+        if (filledFields.length > 0) {
+          hasAnyAdsFilled = true;
+
+          if (!a.start_date)
+            return `Tanggal mulai ads wajib diisi untuk ${getPlatformName(pid)}`;
+
+          if (!a.end_date)
+            return `Tanggal selesai ads wajib diisi untuk ${getPlatformName(pid)}`;
+
+          if (!a.budget_ads)
+            return `Budget ads wajib diisi untuk ${getPlatformName(pid)}`;
+
+          if (Number(a.budget_ads) <= 0)
+            return `Budget ads harus lebih dari 0 untuk ${getPlatformName(pid)}`;
+        }
+      }
+
+      // optional: kalau checkbox ads dicentang tapi ga ada satu pun diisi
+      if (!hasAnyAdsFilled) {
+        // boleh kosong → TIDAK ERROR
+      }
     }
 
     if (form.use_influencer) {
@@ -238,34 +286,45 @@ export default function CreateContent() {
     return "";
   };
 
-  /* =========================
-     SUBMIT
-  ========================== */
+  /* ========================= SUBMIT ========================= */
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // VALIDASI LAIN
     const err = validate();
     if (err) return toast.error(err);
+
+    // VALIDASI ADS LANGSUNG sebelum submit
+    if (form.is_ads) {
+      for (const pid of selectedPlatforms) {
+        const a = form.ads_by_platform?.[pid];
+        if (!a) continue;
+
+        if (a.start_date && form.posting_date && a.start_date < form.posting_date) {
+          return toast.error(`Start Ads untuk ${getPlatformName(pid)} tidak boleh kurang dari tanggal konten`);
+        }
+        if (a.start_date && a.end_date && a.end_date < a.start_date) {
+          return toast.error(`End Ads untuk ${getPlatformName(pid)} harus setelah start ads`);
+        }
+        if ((a.start_date || a.end_date || a.budget_ads) && (!a.start_date || !a.end_date || !a.budget_ads)) {
+          return toast.error(`Lengkapi semua field ads untuk ${getPlatformName(pid)}`);
+        }
+      }
+    }
 
     setLoading(true);
     try {
       const payload = {
         title: form.title,
         posting_date: form.posting_date,
-        content_type_ids: Object.fromEntries(
-          Object.entries(form.selected_content_by_platform).map(([pid, ctId]) => [
-            pid,
-            ctId
-          ])
-        ),
+        content_type_ids: form.selected_content_by_platform,
         budget_content: Number(form.budget_content),
         description: form.description,
         influencer_ids: form.use_influencer
-          ? form.influencer_rows.filter((r) => r.influencer_id).map((r) => r.influencer_id)
+          ? form.influencer_rows.filter(r => r.influencer_id).map(r => r.influencer_id)
           : [],
         is_ads: form.is_ads,
-        ads_start_date: form.is_ads ? form.ads_start_date : null,
-        ads_end_date: form.is_ads ? form.ads_end_date : null,
-        budget_ads: form.is_ads ? Number(form.budget_ads) : 0,
+        ads_by_platform: form.is_ads ? form.ads_by_platform : {},
       };
 
       await axios.post("/content-plans", payload);
@@ -462,11 +521,11 @@ export default function CreateContent() {
                                 <div className="text-sm font-bold text-slate-800">{selectedInf.name}</div>
 
                                 {/* Platforms */}
-                                <div className="mt-2 space-y-2">
+                                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   {selectedInf.platforms.map((p) => (
                                     <div
                                       key={p.id}
-                                      className="flex items-center justify-between border rounded-lg px-4 py-3"
+                                      className="flex items-center justify-between border rounded-lg px-4 py-3 min-h-[72px]"
                                     >
                                       <div className="flex flex-col">
                                         <span className="text-sm font-semibold text-slate-700">{p.name}</span>
@@ -622,40 +681,50 @@ export default function CreateContent() {
           <span className="text-xs text-slate-500">(opsional)</span>
         </label>
 
-        {form.is_ads && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border rounded-xl bg-white shadow-sm">
-            <Field label="Tanggal Mulai Ads" required>
-              <input
-                type="date"
-                name="ads_start_date"
-                className={baseInput}
-                value={form.ads_start_date}
-                onChange={handleChange}
-              />
-            </Field>
+        {form.is_ads && selectedPlatforms.map(pid => (
+          <div key={pid} className="border rounded-xl p-4 bg-white shadow-sm space-y-4">
+            <div className="font-bold text-slate-800">
+              Ads – {getPlatformName(pid)}
+            </div>
 
-            <Field label="Tanggal Selesai Ads" required>
-              <input
-                type="date"
-                name="ads_end_date"
-                className={baseInput}
-                value={form.ads_end_date}
-                onChange={handleChange}
-              />
-            </Field>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Field label="Tanggal Mulai Ads">
+                <input
+                  type="date"
+                  className={baseInput}
+                  value={form.ads_by_platform?.[pid]?.start_date || ""}
+                  onChange={e => handleAdsChange(pid, "start_date", e.target.value)}
+                  min={form.posting_date || ""} // Tanggal mulai ads tidak boleh sebelum tanggal konten
+                />
+              </Field>
 
-            <Field label="Budget Ads" required>
-              <input
-                type="number"
-                name="budget_ads"
-                className={baseInput}
-                placeholder="Masukkan budget ads"
-                value={form.budget_ads}
-                onChange={handleChange}
-              />
-            </Field>
+              <Field label="Tanggal Selesai Ads">
+                <input
+                  type="date"
+                  className={baseInput}
+                  value={form.ads_by_platform?.[pid]?.end_date || ""}
+                  onChange={e => handleAdsChange(pid, "end_date", e.target.value)}
+                  min={form.ads_by_platform?.[pid]?.start_date || form.posting_date || ""}
+                // Tanggal selesai ads tidak boleh sebelum start ads
+                />
+              </Field>
+
+              <Field label="Budget Ads">
+                <input
+                  type="number"
+                  className={baseInput}
+                  placeholder="Masukkan budget ads"
+                  value={form.ads_by_platform?.[pid]?.budget_ads || ""}
+                  onChange={e => handleAdsChange(pid, "budget_ads", e.target.value)}
+                />
+              </Field>
+            </div>
+
+            <div className="text-xs text-slate-500">
+              Kosongkan jika tidak ingin menggunakan ads di platform ini
+            </div>
           </div>
-        )}
+        ))}
 
         {/* DESKRIPSI (opsional) */}
         <Field label="Deskripsi">
@@ -692,9 +761,7 @@ export default function CreateContent() {
   );
 }
 
-/* =========================
-   FIELD
-========================= */
+/* ========================= FIELD ========================= */
 function Field({ label, required, children }) {
   return (
     <div>

@@ -8,9 +8,8 @@ export default function CameraCapture({ onCapture, onClose }) {
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(true);
 
-    /* SIMULASI DETEKSI */
-    const [isDetected, setIsDetected] = useState(false);
-    const [scanLine, setScanLine] = useState(true);
+    /* STATIC UI */
+    // Removed fake simulation
 
     useEffect(() => {
         startCamera();
@@ -20,27 +19,16 @@ export default function CameraCapture({ onCapture, onClose }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    useEffect(() => {
-        let timer;
-        if (!loading && !error) {
-            // Simulate scanning process: after 2.5s, "detect" the KTP
-            timer = setTimeout(() => {
-                setIsDetected(true);
-                setScanLine(false);
-            }, 2500);
-        }
-        return () => clearTimeout(timer);
-    }, [loading, error]);
-
     const startCamera = async () => {
         setLoading(true);
         setError("");
         try {
+            // Optimization: Use HD (720p) instead of FHD (1080p)
             const constraints = {
                 video: {
                     facingMode: "environment",
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 }
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
                 }
             };
 
@@ -52,7 +40,7 @@ export default function CameraCapture({ onCapture, onClose }) {
             setLoading(false);
         } catch (err) {
             console.error("Camera Error:", err);
-            setError("Gagal mengakses kamera. Pastikan izin kamera aktif.");
+            setError("Gagal mengakses kamera. Periksa izin browser.");
             setLoading(false);
         }
     };
@@ -69,7 +57,6 @@ export default function CameraCapture({ onCapture, onClose }) {
 
         const video = videoRef.current;
         const canvas = canvasRef.current;
-
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
 
@@ -85,7 +72,7 @@ export default function CameraCapture({ onCapture, onClose }) {
                 stopCamera();
                 onClose();
             }
-        }, "image/jpeg", 0.8);
+        }, "image/jpeg", 0.85);
     };
 
     return (
@@ -95,13 +82,18 @@ export default function CameraCapture({ onCapture, onClose }) {
                 <button onClick={onClose} className="text-white p-2 rounded-full hover:bg-white/20">
                     <Icon icon="mdi:close" width="32" />
                 </button>
-                <span className="text-white font-semibold">Ambil Foto KTP</span>
+                <span className="text-white font-semibold">Foto KTP</span>
                 <div className="w-10"></div>
             </div>
 
-            {/* VIDEO */}
+            {/* VIDEO Viewport */}
             <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
-                {loading && <div className="text-white flex flex-col items-center"><Icon icon="mdi:loading" className="animate-spin mb-2" width="32" /> Membuka Kamera...</div>}
+                {loading && (
+                    <div className="text-white flex flex-col items-center">
+                        <Icon icon="mdi:loading" className="animate-spin mb-2" width="32" />
+                        <span className="text-sm">Membuka Kamera...</span>
+                    </div>
+                )}
 
                 {error ? (
                     <div className="text-white text-center p-6">
@@ -119,33 +111,27 @@ export default function CameraCapture({ onCapture, onClose }) {
                     />
                 )}
 
-                {/* OVERLAY GUIDE */}
+                {/* OVERLAY LAYER */}
                 {!error && !loading && (
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                        {/* Darkened Area outside box */}
-                        <div className={`absolute inset-0 border-[50px] md:border-[150px] transition-colors duration-500 box-border w-full h-full z-0 ${isDetected ? 'border-black/70' : 'border-black/50'}`}></div>
+                        {/* Dimmed Background */}
+                        <div className="absolute inset-0 border-[50px] md:border-[150px] border-black/50 box-border w-full h-full z-0"></div>
 
                         {/* KTP Frame */}
-                        <div className={`relative z-10 w-[85%] aspect-[1.58/1] md:w-[500px] border-2 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] transition-all duration-500 ${isDetected ? 'border-green-400 shadow-[0_0_20px_rgba(74,222,128,0.5)]' : 'border-white'}`}>
+                        <div className="relative z-10 w-[85%] aspect-[1.58/1] md:w-[500px] border-2 border-white rounded-xl">
+                            {/* Corners */}
+                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 -mt-1 -ml-1 rounded-tl-xl border-blue-500"></div>
+                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 -mt-1 -mr-1 rounded-tr-xl border-blue-500"></div>
+                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 -mb-1 -ml-1 rounded-bl-xl border-blue-500"></div>
+                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 -mb-1 -mr-1 rounded-br-xl border-blue-500"></div>
 
-                            {/* Corner Markers */}
-                            <div className={`absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 -mt-1 -ml-1 rounded-tl-xl transition-colors ${isDetected ? 'border-green-500' : 'border-blue-500'}`}></div>
-                            <div className={`absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 -mt-1 -mr-1 rounded-tr-xl transition-colors ${isDetected ? 'border-green-500' : 'border-blue-500'}`}></div>
-                            <div className={`absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 -mb-1 -ml-1 rounded-bl-xl transition-colors ${isDetected ? 'border-green-500' : 'border-blue-500'}`}></div>
-                            <div className={`absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 -mb-1 -mr-1 rounded-br-xl transition-colors ${isDetected ? 'border-green-500' : 'border-blue-500'}`}></div>
+                            {/* Scan Line Animation */}
+                            <div className="absolute top-0 left-2 right-2 h-0.5 bg-blue-400 opacity-80 animate-scan-fast"></div>
 
-                            {/* SCAN LINE ANIMATION */}
-                            {scanLine && (
-                                <div className="absolute top-0 left-2 right-2 h-0.5 bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)] animate-[scan_2s_ease-in-out_infinite]"></div>
-                            )}
-
-                            {/* Hint Text */}
-                            <div className="absolute -bottom-24 left-0 right-0 text-center">
-                                <p className={`text-lg font-bold drop-shadow-md transition-colors ${isDetected ? 'text-green-400' : 'text-white'}`}>
-                                    {isDetected ? "KTP TERDETEKSI!" : "Posisikan KTP di sini"}
-                                </p>
-                                <p className="text-sm mt-1 text-gray-200 opacity-80">
-                                    {isDetected ? "Pastikan gambar jelas & tidak buram" : "Sedang memindai..."}
+                            {/* Feedback Text */}
+                            <div className="absolute -bottom-20 left-0 right-0 text-center">
+                                <p className="text-lg font-bold drop-shadow-sm text-white">
+                                    Posisikan KTP dalam kotak
                                 </p>
                             </div>
                         </div>
@@ -153,26 +139,37 @@ export default function CameraCapture({ onCapture, onClose }) {
                 )}
             </div>
 
-            {/* FOOTER CONTROLS */}
+            {/* SHUTTER BUTTON */}
             {!error && !loading && (
-                <div className="absolute bottom-0 left-0 right-0 p-8 flex justify-center items-center bg-gradient-to-t from-black/80 to-transparent z-20">
+                <div className="absolute bottom-0 left-0 right-0 p-6 flex justify-center items-center bg-black/40 backdrop-blur-sm z-20">
                     <button
                         onClick={takePhoto}
-                        className={`w-20 h-20 rounded-full border-4 flex items-center justify-center active:scale-95 transition-all shadow-lg ${isDetected ? 'border-green-500 bg-green-500/20 shadow-green-500/30' : 'border-white bg-white/20'}`}
+                        className="w-16 h-16 rounded-full border-4 border-white bg-white/10 flex items-center justify-center active:scale-95 transition-all"
                     >
-                        <div className={`w-16 h-16 rounded-full transition-colors duration-300 ${isDetected ? 'bg-green-400' : 'bg-white'}`}></div>
+                        <div className="w-12 h-12 rounded-full bg-white"></div>
                     </button>
                 </div>
             )}
 
             <canvas ref={canvasRef} className="hidden" />
 
+            {/* Optimized Animations - Using Transform */}
             <style>{`
-        @keyframes scan {
-          0% { top: 0%; opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
-          100% { top: 100%; opacity: 0; }
+        @keyframes scan-fast {
+          0% { transform: translateY(0); opacity: 0; }
+          15% { opacity: 1; }
+          85% { opacity: 1; }
+          100% { transform: translateY(200px); opacity: 0; } /* Adjust 200px based on container if possible, but % usually relative to line. Using % relative to parent height is safer */
+          /* Actually, percentage top is better for responsive box */
+        }
+        .animate-scan-fast {
+          animation: scan-vertical 2s linear infinite;
+        }
+        @keyframes scan-vertical {
+           0% { top: 2%; opacity: 0; }
+           10% { opacity: 1; }
+           90% { opacity: 1; }
+           100% { top: 98%; opacity: 0; }
         }
       `}</style>
         </div>

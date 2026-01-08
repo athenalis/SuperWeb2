@@ -21,6 +21,12 @@ const normalizeKey = (str = "") =>
     .toUpperCase()
     .replace(/[^A-Z]/g, "");
 
+    
+    const normalizeCityDisplay = (name = "") => {
+      const key = normalizeKey(name);
+      return CITY_DISPLAY_MAP[key] || name;
+    };
+    
 /* =======================
    CITY ALIAS
 ======================= */
@@ -80,10 +86,12 @@ const DISTRICT_ALIAS_RAW = {
   KELAPAGADINGTIMUR: "KELAPAGADING",
   MAMPANG: "MAMPANGPRAPATAN",
   MAMPANGPERAPATAN: "MAMPANGPRAPATAN",
-  GROGOL: "GROGOLPETAMBURAN",
-  PETAMBURAN: "GROGOLPETAMBURAN",
-  GROGOLPERTAMBURAN: "GROGOLPETAMBURAN",
+  GROGOLPETAMBURAN: "GROGOLPERTAMBURAN",
+  GROGOL: "GROGOLPERTAMBURAN",
+  PETAMBURAN: "GROGOLPERTAMBURAN",
+  GROGOLPERTAMBURAN: "GROGOLPERTAMBURAN",
   TANJUNGPRIUK: "TANJUNGPRIOK",
+  KEPULAUANSERIBUSELATAN: "KEPULAUANSERIBUSELATAN.",
 };
 
 const DISTRICT_ALIAS = Object.fromEntries(
@@ -93,6 +101,32 @@ const DISTRICT_ALIAS = Object.fromEntries(
 const getDistrictKey = (name = "") => {
   const raw = normalizeKey(name);
   return DISTRICT_ALIAS[raw] || raw;
+};
+
+/* =======================
+   VILLAGE ALIAS
+======================= */
+const VILLAGE_ALIAS_RAW = {
+  PAPANGO: "PAPANGGO",
+  WIJAYAKESUMA: "WIJAYAKUSUMA",
+  HARAPANMULYA: "HARAPANMULIA",
+  PALMERIEM: "PALMERAH",
+  HALIMPERDANAKUSUMAH: "HALIMPERDANAKUSUMA",
+  KAMPUNGTENGAH: "TENGAH",
+  PREPEDAN: "TEGALALUR",
+  TANJUNGPRIUK: "TANJUNGPRIOK",
+};
+
+const VILLAGE_ALIAS = Object.fromEntries(
+  Object.entries(VILLAGE_ALIAS_RAW).map(([k, v]) => [
+    normalizeKey(k),
+    normalizeKey(v),
+  ])
+);
+
+const getVillageKey = (name = "") => {
+  const raw = normalizeKey(name);
+  return VILLAGE_ALIAS[raw] || raw;
 };
 
 /* =======================
@@ -185,6 +219,22 @@ export default function MapDpt({
   onRegionClick,
   onLevelChange,
 }) {
+  const getCityDataKey = (name = "") => {
+    const raw = normalizeKey(name);
+  
+    if (dptKota && dptKota[raw]) return raw;
+  
+    const logicKey = CITY_ALIAS[raw];
+    if (logicKey && dptKota && dptKota[logicKey]) return logicKey;
+
+    if (raw.includes("SERIBU")) {
+      if (dptKota["KEPULAUANSERIBU"]) return "KEPULAUANSERIBU";
+      if (dptKota["KABADMKEPSERIBU"]) return "KABADMKEPSERIBU";
+    }
+  
+    return raw;
+  };
+  
   const mapRef = useRef();
   const [currentZoom, setCurrentZoom] = useState(10);
   const [prevLevel, setPrevLevel] = useState("kota");
@@ -225,11 +275,23 @@ export default function MapDpt({
   };
 
   const getData = (name = "", level) => {
-    const key = normalizeKey(name);
-    if (level === "kota") return dptKota[key];
-    if (level === "kecamatan") return dptKecamatan[key];
+    if (!name) return null;
+  
+    if (level === "kota") {
+      const key = getCityDataKey(name);
+      return dptKota[key];
+    }
+  
+    if (level === "kecamatan") {
+      const key = getDistrictKey(name);
+      return dptKecamatan[key];
+    }
+  
+    // 🔥 KELURAHAN
+    const key = getVillageKey(name);
     return dptKelurahan[key];
   };
+  
 
   // Current GeoJSON
   const currentGeoJson = useMemo(() => {

@@ -110,19 +110,20 @@ export default function DetailContent() {
   /* =========================
      CONTENT TYPE BY PLATFORM
   ========================= */
-  const getContentByPlatform = (platform) => {
-    const picked = platform.content_types?.find(
-      (ct) => ct.id === platform.pivot?.content_type_id
-    );
-    return picked?.name || "-";
+  const getContentTypeName = (cp) => {
+    return cp.content_type?.name || "-";
   };
 
   /* =========================
      BUDGET
   ========================= */
-  const used = data.used_budget || data.used_budget_with_trashed;
-  const budgetContent = Number(used?.budget_content ?? 0);
-  const budgetAds = Number(used?.budget_ads ?? 0);
+  const budgetContent = Number(data.budget_with_trashed?.budget_content ?? 0);
+
+  const budgetAds = data.content_platforms?.reduce(
+    (sum, cp) => sum + Number(cp.ads?.budget_ads ?? 0),
+    0
+  );
+
   const totalBudget = budgetContent + budgetAds;
 
   return (
@@ -147,7 +148,6 @@ export default function DetailContent() {
             className="
               absolute right-0
               top-1/2 -translate-y-1/2
-              md:top-1/2 md:-translate-y-1/2
               w-10 h-10 md:w-11 md:h-11
               flex items-center justify-center
               rounded-lg border border-blue-900
@@ -155,9 +155,8 @@ export default function DetailContent() {
               hover:bg-blue-900 hover:text-white
               transition
             "
-            aria-label="Edit Konten"
           >
-            <Icon icon="solar:pen-outline" width={18} className="md:w-5" />
+            <Icon icon="solar:pen-outline" width={18} />
           </button>
         </div>
 
@@ -168,9 +167,41 @@ export default function DetailContent() {
             <Field label="Tanggal Konten" value={formatDate(data.posting_date)} />
             <Field
               label="Platform"
-              value={data.platforms?.map((p) => p.name).join(", ")}
+              value={data.content_platforms
+                ?.map((cp) => cp.platform?.name)
+                .join(", ")}
             />
           </Grid>
+        </Section>
+
+        {/* KONTEN */}
+        <Section title="Konten">
+          <div className="space-y-4">
+            {data.content_platforms.map((cp) => (
+              <div
+                key={cp.id}
+                className="border rounded-xl px-5 py-4 space-y-3 bg-white"
+              >
+                <div className="flex justify-between items-center">
+                  <div className="font-semibold text-slate-800">
+                    {cp.platform?.name}
+                  </div>
+                  <div className="text-sm text-slate-600">
+                    {getContentTypeName(cp)}
+                  </div>
+                </div>
+
+                <div className="border-t pt-3 space-y-1">
+                  <div className="text-xs font-medium text-slate-500">
+                    Link Konten
+                  </div>
+                  <div className="text-sm">
+                    {renderLink(cp.link)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </Section>
 
         {/* INFLUENCER */}
@@ -183,8 +214,9 @@ export default function DetailContent() {
                     Influencer {idx + 1}: {inf.name}
                   </div>
 
+                  {/* PLATFORM & FOLLOWERS */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {inf.platforms.map((p) => (
+                    {inf.platforms?.map((p) => (
                       <div
                         key={p.id}
                         className="flex justify-between border rounded-lg px-4 py-3"
@@ -204,9 +236,13 @@ export default function DetailContent() {
                     ))}
                   </div>
 
+                  {/* CP */}
                   {(inf.email || inf.contacts?.length > 0) && (
                     <div className="border-t pt-4">
-                      <div className="font-bold mb-2">CP (Kontak Person)</div>
+                      <div className="font-bold mb-2">
+                        CP (Kontak Person)
+                      </div>
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {inf.email && (
                           <div className="border rounded-lg px-4 py-3">
@@ -214,6 +250,7 @@ export default function DetailContent() {
                             <div>{inf.email}</div>
                           </div>
                         )}
+
                         {inf.contacts?.map((c, i) => (
                           <div key={i} className="border rounded-lg px-4 py-3">
                             <div className="text-xs text-slate-500">
@@ -231,36 +268,6 @@ export default function DetailContent() {
           </Section>
         )}
 
-        {/* KONTEN */}
-        <Section title="Konten">
-          <div className="space-y-4">
-            {data.platforms.map((p) => (
-              <div
-                key={p.id}
-                className="border rounded-xl px-5 py-4 space-y-3 bg-white"
-              >
-                {/* HEADER */}
-                <div className="flex justify-between items-center">
-                  <div className="font-semibold text-slate-800">{p.name}</div>
-                  <div className="text-sm text-slate-600">
-                    {getContentByPlatform(p)}
-                  </div>
-                </div>
-
-                {/* LINK */}
-                <div className="border-t pt-3 space-y-1">
-                  <div className="text-xs font-medium text-slate-500">
-                    Link Konten
-                  </div>
-                  <div className="text-sm">
-                    {renderLink(p.pivot?.link)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Section>
-
         {/* BUDGET & ADS */}
         <Section title="Budget & Ads">
           <Grid>
@@ -269,24 +276,8 @@ export default function DetailContent() {
               value={formatRupiah(budgetContent)}
             />
             <Field
-              label="Budget Ads"
+              label="Total Budget Ads"
               value={formatRupiah(budgetAds)}
-            />
-            <Field
-              label="Ads Mulai"
-              value={formatDate(data.ads_start_date)}
-            />
-            <Field
-              label="Ads Selesai"
-              value={formatDate(data.ads_end_date)}
-            />
-            <Field
-              label="Durasi Ads"
-              value={calcAdsDuration(
-                data.ads_start_date,
-                data.ads_end_date
-              )}
-              full
             />
             <Field
               label="Total Budget"
@@ -294,6 +285,46 @@ export default function DetailContent() {
               full
             />
           </Grid>
+
+          {/* ADS PER PLATFORM */}
+          <div className="space-y-4 pt-6">
+            {data.content_platforms
+              .filter((cp) => cp.ads)
+              .map((cp) => (
+                <div
+                  key={cp.id}
+                  className="border rounded-xl px-5 py-4 bg-white space-y-3"
+                >
+                  <div className="flex justify-between">
+                    <div className="font-semibold">
+                      {cp.platform?.name}
+                    </div>
+                    <div className="text-sm font-medium">
+                      {formatRupiah(cp.ads?.budget_ads)}
+                    </div>
+                  </div>
+
+                  <Grid>
+                    <Field
+                      label="Ads Mulai"
+                      value={formatDate(cp.ads?.start_date)}
+                    />
+                    <Field
+                      label="Ads Selesai"
+                      value={formatDate(cp.ads?.end_date)}
+                    />
+                    <Field
+                      label="Durasi Ads"
+                      value={calcAdsDuration(
+                        cp.ads?.start_date,
+                        cp.ads?.end_date
+                      )}
+                      full
+                    />
+                  </Grid>
+                </div>
+              ))}
+          </div>
         </Section>
 
         {/* STATUS */}

@@ -32,12 +32,10 @@ export default function Koordinator() {
 
   // ================= FILTER =================
   const [filters, setFilters] = useState({
-    nik: "",
-    nama: "",
+    keyword: "",
     city_code: "",
     district_code: "",
     village_code: "",
-    tps: "",
   });
 
   const [activeFilters, setActiveFilters] = useState({});
@@ -68,7 +66,11 @@ export default function Koordinator() {
   // ================= FETCH =================
   const fetchKoordinators = async () => {
     const res = await api.get("/koordinator", {
-      params: activeFilters,
+      params: {
+      city_code: activeFilters.city_code,
+      district_code: activeFilters.district_code,
+      village_code: activeFilters.village_code,
+    },
     });
     // Handle both paginated and non-paginated
     const result = res.data.data;
@@ -108,11 +110,18 @@ export default function Koordinator() {
   };
 
   const semanticFiltered = koordinators.filter((item) => {
-    return (
-      matchNama(item.nama ?? "", filters.nama) &&
-      matchNik(item.nik ?? "", filters.nik) &&
-      matchTps(item.tps ?? "", filters.tps)
-    );
+    const s = filters.keyword.toLowerCase().trim();
+    if (!s) return true; // Jika kosong, tampilkan semua
+
+    const matchNama = (item.nama ?? "").toLowerCase().includes(s);
+    const matchNik = String(item.nik ?? "").includes(s);
+      
+    // Normalisasi TPS (buang angka 0 di depan agar '001' match dengan '1')
+    const normalize = (val) => String(val).replace(/^0+/, "");
+    const matchTps = normalize(item.tps ?? "") === normalize(s);
+
+    // Return true jika salah satu kolom cocok (Logika OR)
+    return matchNama || matchNik || matchTps;
   });
 
   const totalPage = Math.ceil(semanticFiltered.length / perPage);
@@ -126,17 +135,19 @@ export default function Koordinator() {
 
   // ================= FILTER ACTION =================
   const applyFilter = () => {
-    setActiveFilters(filters);
+    setActiveFilters({
+    city_code: filters.city_code,
+    district_code: filters.district_code,
+    village_code: filters.village_code,
+  });
   };
 
   const resetFilter = () => {
     setFilters({
-      nik: "",
-      nama: "",
+      keyword: "",
       city_code: "",
       district_code: "",
       village_code: "",
-      tps: "",
     });
     setActiveFilters({});
     setDistricts([]);
@@ -305,32 +316,31 @@ const exportAllKoordinators = async () => {
 
       {/* ================= FILTER ================= */}
       <div className="bg-white rounded-xl shadow p-6 space-y-6">
+      
         <div className="flex items-center gap-3">
           <Icon icon="mdi:filter-variant" className="text-blue-700" width="28" />
           <div>
             <div className="text-lg font-semibold">Filter Data</div>
             <div className="text-sm text-slate-400">
-              Cari data berdasarkan kriteria
+              Cari data berdasarkan nama, NIK, TPS, atau wilayah
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          <input
-            className="border border-gray-400 px-5 py-3 rounded-lg"
-            placeholder="Cari NIK..."
-            value={filters.nik}
-            onChange={(e) => setFilters({ ...filters, nik: e.target.value })}
-          />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="md:col-span-1 relative">
+             <Icon icon="mdi:magnify" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" width="20" />
+             <input
+              className="w-full border border-gray-400 pl-12 pr-5 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              placeholder="Cari Nama / NIK / TPS"
+              value={filters.keyword}
+              onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
+              onKeyDown={(e) => e.key === 'Enter' && applyFilter()}
+            />
+          </div>
 
-          <input
-            className="border border-gray-400 px-5 py-3 rounded-lg"
-            placeholder="Cari Nama..."
-            value={filters.nama}
-            onChange={(e) => setFilters({ ...filters, nama: e.target.value })}
-          />
-
-          <div className="relative">
+          {/* ================= Kota/kabupaten ================= */}
+          <div className="md:col-span-1 relative">
             <Icon
               icon="mdi:chevron-down"
               className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
@@ -360,51 +370,40 @@ const exportAllKoordinators = async () => {
             </select>
           </div>
 
-          <div className="relative">
-            <Icon
-              icon="mdi:chevron-down"
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-              width="22"
-            />
-            <select
-              className={`w-full appearance-none border border-gray-400 pl-5 pr-12 py-3 rounded-lg ${filters.district_code ? "text-slate-800" : "text-slate-400"
-                }`}
-              value={filters.district_code}
-              disabled={!filters.city_code}
-              onChange={(e) => {
-                const val = e.target.value;
-                setFilters({
-                  ...filters,
-                  district_code: val,
-                  village_code: "",
-                });
-                loadVillages(val);
-              }}
-            >
-              <option value="">Pilih Kecamatan</option>
-              {districts.map((d) => (
-                <option key={d.district_code} value={d.district_code}>
-                  {d.district}
-                </option>
-              ))}
-            </select>
-          </div>
+            {/* ================= Kecamatan ================= */}
+         <div className="md:col-span-1 relative">
+              <Icon icon="mdi:chevron-down" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" width="22" />
+              <select
+                className="w-full appearance-none border border-gray-400 pl-5 pr-12 py-3 rounded-lg"
+                value={filters.district_code}
+                disabled={!filters.city_code}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilters({ ...filters, district_code: val, village_code: "" });
+                  loadVillages(val);
+                }}
+              >
+                <option value="">Pilih Kecamatan</option>
+                {districts.map((d) => (<option key={d.district_code} value={d.district_code}>{d.district}</option>))}
+              </select>
+            </div>
 
-          <div className="relative">
+              {/* ================= Kelurahan ================= */}
+          <div className="md:col-span-1 relative">
             <Icon
               icon="mdi:chevron-down"
               className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
               width="22"
             />
             <select
-              className={`w-full appearance-none border border-gray-400 pl-5 pr-12 py-3 rounded-lg ${filters.village_code ? "text-slate-800" : "text-slate-400"
-                }`}
+              className="w-full appearance-none border border-gray-400 pl-5 pr-12 py-3 rounded-lg"
               value={filters.village_code}
               disabled={!filters.district_code}
               onChange={(e) =>
                 setFilters({ ...filters, village_code: e.target.value })
               }
-            >
+>
+
               <option value="">Pilih Kelurahan</option>
               {villages.map((v) => (
                 <option key={v.village_code} value={v.village_code}>
@@ -414,12 +413,6 @@ const exportAllKoordinators = async () => {
             </select>
           </div>
 
-          <input
-            className="border border-gray-400 px-5 py-3 rounded-lg"
-            placeholder="Cari TPS..."
-            value={filters.tps}
-            onChange={(e) => setFilters({ ...filters, tps: e.target.value })}
-          />
         </div>
 
         <div className="flex justify-end gap-3">

@@ -8,44 +8,36 @@ class ContentPlan extends Model
 {
     protected $fillable = [
         'title',
-        'content_type_id',
-        'status_id',
-        'refund_budget',
         'description',
         'posting_date',
-        'is_ads',
-        'ads_start_date',
-        'ads_end_date',
+        'status_id',
+        'refund_budget',
     ];
 
-    public function usedBudget()
-    {
-        return $this->hasOne(UsedBudget::class);
-    }
+    protected $casts = [
+        'refund_budget' => 'boolean',
+        'posting_date' => 'date',
+    ];
 
-    public function usedBudgetWithTrashed()
-    {
-        return $this->hasOne(UsedBudget::class)->withTrashed();
-    }
-
-    public function contentType()
-    {
-        return $this->belongsTo(ContentType::class);
-    }
+    /* ======================
+        RELATIONSHIP
+    ====================== */
 
     public function status()
     {
         return $this->belongsTo(ContentStatus::class);
     }
 
-    public function platforms()
+    // budget (default TIDAK include soft delete)
+    public function budget()
     {
-        return $this->belongsToMany(
-            Platform::class,
-            'content_platforms',
-            'content_plan_id',
-            'platform_id'
-        )->withPivot('content_type_id', 'link');
+        return $this->hasOne(ContentBudget::class);
+    }
+
+    // khusus index & detail (include soft delete)
+    public function budgetWithTrashed()
+    {
+        return $this->hasOne(ContentBudget::class)->withTrashed();
     }
 
     public function contentPlatforms()
@@ -60,12 +52,22 @@ class ContentPlan extends Model
             'content_plan_influencers',
             'content_plan_id',
             'influencer_id'
-        ); // hapus ->withTimestamps()
+        );
     }
 
-    // optional helper untuk nama content type
-    public function platformWithContentType()
+    /* ======================
+        ACCESSOR
+    ====================== */
+
+    public function getTotalBudgetAttribute()
     {
-        return $this->platforms()->with('contentTypes');
+        $budgetContent = $this->budget?->budget_content ?? 0;
+
+        $adsBudget = $this->contentPlatforms
+            ->sum(fn ($cp) =>
+                $cp->ads ? $cp->ads->budget_ads : 0
+            );
+
+        return $budgetContent + $adsBudget;
     }
 }

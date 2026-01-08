@@ -4,7 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\TotalBudget;
-use App\Models\UsedBudget;
+use App\Models\ContentBudget;
+use App\Models\ContentPlatformAd;
 
 class BudgetController extends Controller
 {
@@ -12,9 +13,10 @@ class BudgetController extends Controller
     {
         $totalBudget = TotalBudget::first()?->amount ?? 0;
 
-        $usedContent = UsedBudget::whereNull('deleted_at')->sum('budget_content');
-        $usedAds = UsedBudget::whereNull('deleted_at')->sum('budget_ads');
+        $usedContent = ContentBudget::sum('budget_content');
 
+        $usedAds = ContentPlatformAd::whereNull('deleted_at')
+            ->sum('budget_ads');
 
         return response()->json([
             'total_budget' => $totalBudget,

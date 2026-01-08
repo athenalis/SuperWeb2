@@ -25,9 +25,9 @@ use App\Http\Controllers\Api\ContentPlanController;
 use App\Http\Controllers\Api\ContentTypeController;
 use App\Http\Controllers\Api\CoordinatorController;
 use App\Http\Controllers\Api\NotificationController;
-use App\Http\Controllers\Api\AnalisisPaslonController;
-use App\Http\Controllers\Api\RelawanHistoryController;
 use App\Http\Controllers\Api\ContentPlatformController;
+use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\MapVisitController;
 
 Route::post('/login', [AuthController::class, 'login'])->name('login');
 Route::middleware('auth:sanctum')->get('/me', function (Request $request) {
@@ -88,6 +88,7 @@ Route::get('/relawan/template', function () {
 Route::get('/ormas', [OrmasController::class, 'index']);
 
 Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
+    // Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
     Route::prefix('koordinator')->name('koordinator.')->group(function () {
         Route::post('/export', [CoordinatorController::class, 'exportAll']);
         Route::get('/', [CoordinatorController::class, 'index']);
@@ -124,10 +125,13 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
             Route::get('/kota', [PetaPartaiController::class, 'perKota']);
             Route::get('/kecamatan', [PetaPartaiController::class, 'perKecamatan']);
         });
+        Route::get('/visit', [MapVisitController::class, 'mapData']);
     });
+
     Route::prefix('analisis')->group(function () {
         Route::get('/straight-ticket/district', [Analisis::class, 'straightTicketByDistrict']);
     });
+    
     Route::get('/activity-logs', [HistoryController::class, 'index']);
     Route::get('/straight/jakarta-utara', [TicketVoteController::class, 'jakartaUtaraPerKecamatan']);
 
@@ -141,15 +145,16 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::get('/{id}/analytics', [EngagementController::class, 'analyticContent']);
         Route::post('/{id}/analytics/record', [EngagementController::class, 'store']);
         Route::put('/{id}/analytics/record/{engagementId}', [EngagementController::class, 'update']);
-
     });
 
     Route::get('/budget', [BudgetController::class, 'index']);
     Route::get('/platforms', [ContentPlatformController::class, 'index']);
     Route::get('/content-types', [ContentTypeController::class, 'index']);
     Route::get('/influencers', [InfluencerController::class, 'index']);
-    Route::get('/content-statuses', function () {return ContentStatus::select('id', 'label')->get();
-});
+    Route::get('/content-statuses', function () {
+        return ContentStatus::select('id', 'label')->get();
+    });
+    Route::get('/dashboard', [DashboardController::class, 'index']);
 });
 
 Route::middleware(['auth:sanctum', 'role:koordinator'])->group(function () {

@@ -14,4 +14,14 @@ class ContentType extends Model
     {
         return $this->hasMany(ContentPlan::class);
     }
+
+    public function platforms()
+    {
+        return $this->belongsToMany(
+            Platform::class,
+            'content_type_platforms',
+            'content_type_id',
+            'platform_id'
+        );
+    }
 }

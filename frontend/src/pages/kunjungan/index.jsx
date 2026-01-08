@@ -4,6 +4,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Icon } from "@iconify/react";
 import api from "../../lib/axios";
 import { toast } from "react-hot-toast";
+import { offlineDb } from "../../lib/offlineDb";
+import { syncService } from "../../lib/syncService";
 
 // === INLINE CONFIRMATION MODAL COMPONENTS ===
 // Menggunakan Portal dan Style persis seperti Hapus Relawan
@@ -83,7 +85,7 @@ export default function KunjunganIndex() {
     const [error, setError] = useState(null);
     const [pagination, setPagination] = useState(null);
     const [search, setSearch] = useState("");
-    const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "pending");
+    const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "all");
 
     // === DELETE MODAL STATE ===
     const [deleteModal, setDeleteModal] = useState({
@@ -100,6 +102,9 @@ export default function KunjunganIndex() {
         accepted: 0,
     });
 
+    const [offlineItems, setOfflineItems] = useState([]);
+    const [isSyncing, setIsSyncing] = useState(false);
+
     // State untuk expand baris (menyimpan array ID yang expanded)
     const [expandedRows, setExpandedRows] = useState([]);
 
@@ -111,7 +116,34 @@ export default function KunjunganIndex() {
 
     useEffect(() => {
         fetchKunjungan();
+        loadOfflineData();
     }, [statusFilter, searchParams]); // Re-fetch when filter or params change
+
+    const loadOfflineData = async () => {
+        try {
+            const items = await offlineDb.getAllVisits();
+            // Filter only pending items
+            setOfflineItems(items.filter(i => i.sync_status === 'pending'));
+        } catch (err) {
+            console.error("Failed to load offline items", err);
+        }
+    };
+
+    const handleSync = async () => {
+        if (isSyncing) return;
+        setIsSyncing(true);
+        const tid = toast.loading("Sinkronisasi data...");
+        try {
+            await syncService.syncPendingVisits();
+            await loadOfflineData();
+            await fetchKunjungan();
+        } catch (err) {
+            toast.error("Gagal sinkronisasi data");
+        } finally {
+            setIsSyncing(false);
+            toast.dismiss(tid);
+        }
+    };
 
     // Debounced search effect
     useEffect(() => {
@@ -239,17 +271,21 @@ export default function KunjunganIndex() {
 
     // === STATUS STYLE ===
     const getStatusColor = (item) => {
+        if (item.sync_status === 'pending') return "border-blue-500 text-blue-700 bg-blue-50";
         switch (item.status_verifikasi) {
             case "accepted":
                 return "border-green-500 text-green-700 bg-green-50";
             case "rejected":
                 return "border-red-500 text-red-700 bg-red-50";
             default:
+                if (item.status === 'draft') return "border-slate-400 text-slate-600 bg-slate-50";
                 return "border-amber-500 text-amber-700 bg-amber-50";
         }
     };
 
     const getStatusLabel = (item) => {
+        if (item.sync_status === 'pending') return "Menunggu Sinkron";
+        if (item.status === 'draft') return "Belum Selesai";
         switch (item.status_verifikasi) {
             case "accepted":
                 return "Disetujui";
@@ -259,6 +295,8 @@ export default function KunjunganIndex() {
                 return "Pending";
         }
     };
+
+    const displayData = [...offlineItems, ...data];
 
     return (
         <div className="space-y-4 md:space-y-6 text-slate-900 overflow-x-hidden">
@@ -333,13 +371,25 @@ export default function KunjunganIndex() {
                 </div>
 
                 {role === "relawan" && (
-                    <button
-                        onClick={() => navigate("/kunjungan/anggota")}
-                        className="bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800 transition-all shadow-md flex items-center gap-2 whitespace-nowrap"
-                    >
-                        <Icon icon="mdi:plus" width="22" />
-                        Buat Kunjungan
-                    </button>
+                    <div className="flex gap-2">
+                        {offlineItems.length > 0 && (
+                            <button
+                                onClick={handleSync}
+                                disabled={isSyncing}
+                                className="bg-amber-100 text-amber-700 px-6 py-3 rounded-lg hover:bg-amber-200 transition-all shadow-md flex items-center gap-2 whitespace-nowrap border border-amber-200"
+                            >
+                                <Icon icon={isSyncing ? "mdi:loading" : "mdi:sync"} className={isSyncing ? "animate-spin" : ""} width="22" />
+                                Sync ({offlineItems.length})
+                            </button>
+                        )}
+                        <button
+                            onClick={() => navigate("/kunjungan/anggota")}
+                            className="bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800 transition-all shadow-md flex items-center gap-2 whitespace-nowrap"
+                        >
+                            <Icon icon="mdi:plus" width="22" />
+                            Buat Kunjungan
+                        </button>
+                    </div>
                 )}
 
             </div>
@@ -448,22 +498,30 @@ export default function KunjunganIndex() {
 
                     {/* DESKTOP GRID */}
                     <div className="hidden md:grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-                        {data.map(item => (
+                        {displayData.map(item => (
                             <div
-                                key={item.id}
+                                key={item.id || item.offline_id}
                                 onClick={() => {
-                                    // DEBUGGING forcefully
-                                    // alert("DEBUG: Navigating to Visit ID " + item.id); 
-                                    // Force hard reload to bypass any router/state issues
+                                    if (item.sync_status === 'pending') {
+                                        toast.info("Data ini disimpan offline. Silakan klik tombol 'Sync' untuk mengunggah.");
+                                        return;
+                                    }
                                     window.location.href = `/kunjungan/${item.id}`;
                                 }}
                                 className="bg-white border text-sm border-slate-200 rounded-2xl p-5 shadow-sm cursor-pointer hover:border-blue-400 hover:shadow-md transition-all relative overflow-hidden"
                             >
                                 {/* Status Badge */}
                                 <div className="absolute top-0 right-0 p-4">
-                                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getStatusColor(item)}`}>
-                                        {getStatusLabel(item)}
-                                    </span>
+                                    <div className="flex flex-col items-end gap-1">
+                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black border ${getStatusColor(item)}`}>
+                                            {getStatusLabel(item)}
+                                        </span>
+                                        {item.status === 'draft' && (
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                                (Tap pendaftaran)
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="flex items-start gap-4 mb-4">
@@ -502,13 +560,27 @@ export default function KunjunganIndex() {
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            // Force hard navigation
                                             window.location.href = `/kunjungan/${item.id}`;
                                         }}
                                         className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100 transition-colors"
+                                        title="Lihat Detail"
                                     >
                                         <Icon icon="mdi:eye" width="20" />
                                     </button>
+
+                                    {/* Edit Button (Only Pending) */}
+                                    {item.status_verifikasi === 'pending' && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                window.location.href = `/kunjungan/${item.id}/edit`;
+                                            }}
+                                            className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center hover:bg-amber-100 transition-colors"
+                                            title="Edit Data"
+                                        >
+                                            <Icon icon="mdi:pencil" width="20" />
+                                        </button>
+                                    )}
 
                                     {role === "relawan" && (
                                         <button
@@ -566,17 +638,24 @@ export default function KunjunganIndex() {
                     {/* MOBILE LIST */}
                     <div className="md:hidden space-y-3">
                         {
-                            data.map(item => (
+                            displayData.map(item => (
                                 <div
-                                    key={item.id}
+                                    key={item.id || item.offline_id}
                                     className="bg-gradient-to-br from-white to-slate-50 border-2 border-slate-200 rounded-2xl p-4 space-y-4 hover:border-blue-400 hover:shadow-lg transition-all duration-300"
                                 >
 
                                     <div
                                         className="cursor-pointer active:opacity-70 transition-opacity"
                                         onClick={() => {
-                                            // Force hard reload for Mobile view as well
-                                            window.location.href = `/kunjungan/${item.id}`;
+                                            if (item.sync_status === 'pending') {
+                                                toast.info("Data offline. Silakan sinkronkan terlebih dahulu.");
+                                                return;
+                                            }
+                                            if (item.status === 'draft') {
+                                                window.location.href = `/kunjungan/${item.id}/edit`;
+                                            } else {
+                                                window.location.href = `/kunjungan/${item.id}`;
+                                            }
                                         }}
                                     >
                                         <div className="flex justify-between items-start mb-3">
@@ -621,7 +700,30 @@ export default function KunjunganIndex() {
                                         </div>
 
                                         <div className="flex items-center gap-1.5">
-
+                                            {item.status === 'draft' ? (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        window.location.href = `/kunjungan/${item.id}/edit`;
+                                                    }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-bold shadow-sm active:scale-95 transition-transform"
+                                                >
+                                                    <Icon icon="mdi:pencil-outline" width="14" />
+                                                    Selesaikan
+                                                </button>
+                                            ) : (
+                                                item.status_verifikasi === 'pending' && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            window.location.href = `/kunjungan/${item.id}/edit`;
+                                                        }}
+                                                        className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 active:scale-95 transition-all"
+                                                    >
+                                                        <Icon icon="mdi:pencil-outline" width="16" />
+                                                    </button>
+                                                )
+                                            )}
 
                                             {role === "relawan" && (
                                                 <button
@@ -675,34 +777,66 @@ export default function KunjunganIndex() {
                     {/* PAGINATION */}
                     {
                         pagination && pagination.last_page > 1 && (
-                            <div className="px-6 py-4 bg-slate-50 border-t flex items-center justify-between">
-
-                                <span className="hidden sm:inline text-xs text-slate-500 italic">
-                                    Menampilkan {data.length} dari {pagination.total} data
+                            <div className="px-6 py-4 bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <span className="text-xs text-slate-500 italic">
+                                    Menampilkan {displayData.length} data
                                 </span>
 
-                                <div className="flex gap-2 w-full sm:w-auto justify-between sm:justify-end">
-
+                                <div className="flex gap-1">
+                                    {/* PREV */}
                                     <button
                                         disabled={pagination.current_page === 1}
                                         onClick={() => fetchKunjungan(pagination.current_page - 1)}
-                                        className="px-3 py-1 bg-white border border-slate-300 rounded text-xs hover:bg-slate-100 disabled:opacity-50"
+                                        className="px-3 py-1 bg-white border border-slate-300 rounded text-xs hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                     >
                                         Prev
                                     </button>
 
-                                    <div className="px-3 py-1 bg-blue-900 text-white rounded text-xs font-bold">
-                                        {pagination.current_page}
-                                    </div>
+                                    {/* PAGE NUMBERS */}
+                                    {(() => {
+                                        const currentPage = pagination.current_page;
+                                        const lastPage = pagination.last_page;
+                                        const pages = [];
 
+                                        // Simple sliding window logic
+                                        // Always show first, last, and window around current
+                                        const delta = 1; // Number of pages on each side of current
+                                        const range = [];
+                                        for (let i = Math.max(2, currentPage - delta); i <= Math.min(lastPage - 1, currentPage + delta); i++) {
+                                            range.push(i);
+                                        }
+
+                                        if (currentPage - delta > 2) range.unshift("...");
+                                        if (currentPage + delta < lastPage - 1) range.push("...");
+
+                                        range.unshift(1);
+                                        if (lastPage > 1) range.push(lastPage);
+
+                                        return range.map((p, idx) => (
+                                            <button
+                                                key={idx}
+                                                disabled={p === "..."}
+                                                onClick={() => typeof p === 'number' && fetchKunjungan(p)}
+                                                className={`px-3 py-1 rounded text-xs font-bold transition-colors ${p === currentPage
+                                                    ? "bg-blue-600 text-white border border-blue-600"
+                                                    : p === "..."
+                                                        ? "bg-transparent text-slate-400 cursor-default"
+                                                        : "bg-white border border-slate-300 text-slate-600 hover:bg-slate-100"
+                                                    }`}
+                                            >
+                                                {p}
+                                            </button>
+                                        ));
+                                    })()}
+
+                                    {/* NEXT */}
                                     <button
                                         disabled={pagination.current_page === pagination.last_page}
                                         onClick={() => fetchKunjungan(pagination.current_page + 1)}
-                                        className="px-3 py-1 bg-white border border-slate-300 rounded text-xs hover:bg-slate-100 disabled:opacity-50"
+                                        className="px-3 py-1 bg-white border border-slate-300 rounded text-xs hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                     >
                                         Next
                                     </button>
-
                                 </div>
                             </div>
                         )

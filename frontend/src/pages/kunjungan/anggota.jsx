@@ -1,9 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import api from "../../lib/axios";
 import { Icon } from "@iconify/react";
 import CameraCapture from "../../components/CameraCapture";
+import { validateKTP } from "../../lib/ktpValidator";
+import { offlineDb } from "../../lib/offlineDb";
+
+const generateOfflineId = () => `off_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 const maxDate17 = () => {
   const d = new Date();
@@ -16,93 +20,184 @@ export default function CreateKunjungan() {
   const [step, setStep] = useState(1);
   const [kunjunganId, setKunjunganId] = useState(null);
   const [address, setAddress] = useState("");
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const stepRef = useRef();
 
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 1024);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const handleBackClick = () => {
+    setShowExitModal(true);
+  };
+
+  const handleConfirmExit = async () => {
+    // If we have a submitDraft method in the current step, call it
+    if (stepRef.current?.submitDraft) {
+      const saved = await stepRef.current.submitDraft();
+      if (!saved) return; // Stay on page if error
+    }
+    toast.success("Data tersimpan sebagai pending");
+    navigate("/kunjungan");
+  };
+
+  const handleCancelExit = () => {
+    setShowExitModal(false);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-4 md:py-8 px-2 md:px-4">
       <div className="max-w-8xl mx-auto">
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 md:px-8 py-4 md:py-6">
-            <h1 className="text-2xl md:text-3xl font-bold text-white leading-tight">Form Kunjungan Keluarga</h1>
-            <p className="text-blue-100 mt-1 md:mt-2 text-sm md:text-base">Lengkapi data kunjungan secara bertahap</p>
+          {/* Header with Back Button */}
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-4 md:px-8 md:py-6 flex items-center gap-4">
+            <button
+              onClick={handleBackClick}
+              className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-all active:scale-95"
+            >
+              <Icon icon="mdi:arrow-left" className="text-xl md:text-2xl" />
+            </button>
+            <div>
+              <h1 className="text-xl md:text-3xl font-bold text-white leading-tight">Form Kunjungan</h1>
+              <p className="text-blue-100 text-xs md:text-base hidden md:block">Lengkapi data kunjungan secara bertahap</p>
+            </div>
           </div>
 
           <div className="px-5 md:px-8 py-4 md:py-6 bg-gray-50 border-b">
-            <Stepper step={step} />
+            <Stepper step={step} isMobile={isMobile} />
           </div>
 
           <div className="p-5 md:p-8">
-            {step === 1 && <Step1 onNext={(id, addr) => { setKunjunganId(id); setAddress(addr); setStep(2); }} />}
-            {step === 2 && <Step2 kunjunganId={kunjunganId} address={address} onNext={() => setStep(3)} onBack={() => setStep(1)} />}
-            {step === 3 && <Step3 kunjunganId={kunjunganId} onBack={() => setStep(2)} onComplete={() => {
-              if (window.innerWidth < 1024) {
-                toast.success("✅ Kunjungan berhasil dibuat!");
-                navigate(`/kunjungan`);
-              } else {
-                setStep(4);
-              }
-            }} />}
-            {step === 4 && <StepComplete />}
+            {isMobile ? (
+              // --- MOBILE FLOW (2 STEPS -> 3) ---
+              <>
+                {step === 1 && <StepMobileBiodata ref={stepRef} onNext={(id, addr) => { setKunjunganId(id); setAddress(addr); setStep(2); }} />}
+                {step === 2 && <Step3 kunjunganId={kunjunganId} onBack={() => setStep(1)} onComplete={() => {
+                  localStorage.removeItem("kunjungan_draft_v1");
+                  localStorage.removeItem("kunjungan_draft_step1");
+                  localStorage.removeItem("kunjungan_draft_members");
+                  setStep(3);
+                }} />}
+                {step === 3 && <StepComplete onFinish={() => window.location.reload()} />}
+              </>
+            ) : (
+              // --- DESKTOP FLOW (3 STEPS) ---
+              <>
+                {step === 1 && <Step1 ref={stepRef} onNext={(id, addr) => { setKunjunganId(id); setAddress(addr); setStep(2); }} />}
+                {step === 2 && <Step2 kunjunganId={kunjunganId} address={address} onNext={() => setStep(3)} onBack={() => setStep(1)} />}
+                {step === 3 && <Step3 kunjunganId={kunjunganId} onBack={() => setStep(2)} onComplete={() => setStep(4)} />}
+                {step === 4 && <StepComplete onFinish={() => {
+                  localStorage.removeItem("kunjungan_draft_v1");
+                  localStorage.removeItem("kunjungan_draft_step1");
+                  localStorage.removeItem("kunjungan_draft_members");
+                }} />}
+              </>
+            )}
           </div>
         </div>
+
+        {/* Exit Confirmation Modal */}
+        {showExitModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+              <div className="p-6 text-center">
+                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Icon icon="mdi:help-circle" width="32" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">Keluar dari Form?</h3>
+                <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+                  Data yang sudah diisi akan disimpan sebagai <strong className="text-blue-600">Pending</strong> dan menunggu verifikasi.
+                </p>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={handleConfirmExit}
+                    className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition active:scale-95"
+                  >
+                    Ya, Simpan & Keluar
+                  </button>
+                  <button
+                    onClick={handleCancelExit}
+                    className="w-full py-2 text-slate-600 font-bold text-sm hover:text-slate-800 transition"
+                  >
+                    Batal
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function Stepper({ step }) {
-  const steps = [
-    { num: 1, label: "Info Dasar", icon: "1" },
-    { num: 2, label: "Anggota", icon: "2" },
-    { num: 3, label: "Kuisioner", icon: "3" },
+function Stepper({ step, isMobile }) {
+  const steps = isMobile ? [
+    { num: 1, label: "Data Keluarga", icon: "mdi:account-group" },
+    { num: 2, label: "Kuisioner", icon: "mdi:clipboard-text" },
+  ] : [
+    { num: 1, label: "Info Dasar", icon: "mdi:account" },
+    { num: 2, label: "Anggota", icon: "mdi:account-multiple" },
+    { num: 3, label: "Kuisioner", icon: "mdi:clipboard-check" },
   ];
 
   return (
-    <div className="relative max-w-3xl mx-auto">
-      <div className="absolute top-1/2 left-0 right-0 h-1 -translate-y-1/2 bg-gray-200">
+    <div className="relative max-w-2xl mx-auto px-4">
+      {/* Progress Bar Background */}
+      <div className="absolute top-5 left-8 right-8 h-1 bg-gray-100 rounded-full overflow-hidden z-0">
         <div
-          className="h-full bg-blue-600 transition-all duration-500"
+          className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-700 ease-out rounded-full"
           style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}
         />
       </div>
 
-      <div className="relative grid grid-cols-3">
-        {steps.map((s) => (
-          <div
-            key={s.num}
-            className="flex flex-col items-center text-center"
-          >
-            <div
-              className={`
-        w-11 h-11 md:w-12 md:h-12
-        rounded-full flex items-center justify-center
-        text-base md:text-lg font-bold
-        border-4 border-white transition-all
-        ${step >= s.num
-                  ? "bg-blue-600 text-white shadow-lg"
-                  : "bg-gray-200 text-gray-500"}
-      `}
-            >
-              {s.icon}
+      <div className="relative z-10 flex justify-between">
+        {steps.map((s, idx) => {
+          const isActive = step === s.num;
+          const isCompleted = step > s.num;
+
+          return (
+            <div key={s.num} className="flex flex-col items-center group cursor-default">
+              <div
+                className={`
+                  w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center 
+                  transition-all duration-300 transform
+                  ${isActive
+                    ? "bg-white border-2 border-blue-600 text-blue-600 shadow-lg shadow-blue-500/20 scale-110 ring-4 ring-blue-50"
+                    : isCompleted
+                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-none shadow-md scale-100"
+                      : "bg-white border-2 border-slate-100 text-slate-300"
+                  }
+                `}
+              >
+                {isCompleted ? (
+                  <Icon icon="mdi:check" className="text-lg md:text-xl" />
+                ) : (
+                  <Icon icon={s.icon} className="text-lg md:text-xl" />
+                )}
+              </div>
+
+              <span
+                className={`
+                  mt-3 text-[10px] md:text-xs font-bold uppercase tracking-wider transition-colors duration-300
+                  ${isActive ? "text-blue-700" : isCompleted ? "text-blue-600/70" : "text-slate-300"}
+                `}
+              >
+                {s.label}
+              </span>
             </div>
-
-            <span
-              className={`
-        mt-3 text-xs md:text-sm font-semibold
-        ${step >= s.num ? "text-blue-600" : "text-gray-400"}
-      `}
-            >
-              {s.label}
-            </span>
-          </div>
-        ))}
-
+          );
+        })}
       </div>
     </div>
   );
 }
 
-const compressImage = (file, maxWidth = 800, quality = 0.6) => {
+const compressImage = (file, maxWidth = 720, quality = 0.6) => {
   return new Promise((resolve) => {
     // If file is small enough, skip compression
     if (file.size < 500 * 1024) { // < 500KB - skip compression
@@ -142,7 +237,7 @@ const compressImage = (file, maxWidth = 800, quality = 0.6) => {
   });
 };
 
-function Step1({ onNext }) {
+const Step1 = forwardRef(({ onNext }, ref) => {
   const [form, setForm] = useState({
     nama: "", nik: "", tanggal: "", pendidikan: "", pekerjaan: "", penghasilan: "",
     fotoKtp: null, alamat: "", latitude: "", longitude: ""
@@ -176,7 +271,7 @@ function Step1({ onNext }) {
     fetchPekerjaan();
 
     // Auto fetch GPS dinyalakan kembali
-    // getLocationAndAddress();
+    getLocationAndAddress();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -233,7 +328,7 @@ function Step1({ onNext }) {
 
   const getLocationAndAddress = () => {
     if (!navigator.geolocation) {
-      setError("Browser tidak mendukung GPS");
+      toast.error("Fitur Lokasi tidak didukung browser ini (Pastikan menggunakan HTTPS).");
       return;
     }
 
@@ -260,7 +355,7 @@ function Step1({ onNext }) {
           setError("Gagal mengambil lokasi. Pastikan GPS aktif.");
         }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: false, timeout: 7000, maximumAge: 0 }
     );
   };
 
@@ -297,6 +392,45 @@ function Step1({ onNext }) {
     setError("");
     toast.success("Foto KTP berhasil diambil");
   };
+
+  useImperativeHandle(ref, () => ({
+    submitDraft: async () => {
+      // If basic data (nama/nik) is missing, don't even try to save to DB
+      if (!form.nama || !form.nik) return true;
+
+      try {
+        setLoading(true);
+        const fd = new FormData();
+        fd.append("nama", form.nama);
+        fd.append("nik", form.nik);
+        fd.append("is_draft", "1");
+
+        if (form.tanggal) fd.append("tanggal", form.tanggal);
+        if (form.pendidikan) fd.append("pendidikan", form.pendidikan);
+        if (form.pekerjaan) fd.append("pekerjaan", form.pekerjaan);
+        if (form.penghasilan) fd.append("penghasilan", form.penghasilan);
+        if (form.alamat) fd.append("alamat", form.alamat);
+        if (form.latitude) fd.append("latitude", form.latitude);
+        if (form.longitude) fd.append("longitude", form.longitude);
+
+        if (form.fotoKtp instanceof File) {
+          const compressedFoto = await compressImage(form.fotoKtp);
+          fd.append("foto_ktp", compressedFoto);
+        }
+
+        const res = await api.post("/kunjungan", fd, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+
+        return res.data.success;
+      } catch (err) {
+        console.error("Save draft error:", err);
+        return true; // Still allow exit, data is in localStorage
+      } finally {
+        setLoading(false);
+      }
+    }
+  }));
 
   const handleSubmit = async () => {
     if (!isValid) {
@@ -341,16 +475,37 @@ function Step1({ onNext }) {
 
     } catch (err) {
       console.error("Step1 submit error:", err);
-      console.error("Error response:", err.response?.data);
-      console.error("Error status:", err.response?.status);
+
+      // --- OFFLINE FALLBACK ---
+      if (!navigator.onLine || err.message === 'Network Error') {
+        const offId = generateOfflineId();
+        await offlineDb.saveVisit({
+          offline_id: offId,
+          is_draft: false,
+          nama: form.nama,
+          nik: form.nik,
+          alamat: form.alamat,
+          created_at: new Date().toISOString(),
+          family_form: { members_count: 0 },
+          form: { ...form },
+          members: [],
+          answers: null
+        });
+        toast.success("Kunjungan disimpan offline. Silakan lanjut ke Anggota Keluarga. 📶");
+        onNext(offId, form.alamat);
+        return;
+      }
 
       if (err.response?.data?.errors) {
         const backendErrors = Object.values(err.response.data.errors).flat().join(", ");
         setError(`Validasi Gagal: ${backendErrors}`);
+        toast.error("Validasi Gagal. Periksa kembali isian Anda.");
       } else if (err.response?.data?.message) {
         setError(err.response.data.message);
+        toast.error(err.response.data.message);
       } else {
         setError(err.message || "Terjadi kesalahan saat menyimpan data");
+        toast.error(err.message || "Terjadi kesalahan");
       }
     } finally {
       setLoading(false);
@@ -421,15 +576,7 @@ function Step1({ onNext }) {
           )}
         </div>
 
-        <div className="mt-2 text-center">
-          <button
-            type="button"
-            onClick={() => document.getElementById("fotoKtp").click()}
-            className="text-sm text-blue-600 hover:text-blue-800 font-medium underline"
-          >
-            Atau upload dari galeri
-          </button>
-        </div>
+
 
         <input
           id="fotoKtp"
@@ -478,7 +625,7 @@ function Step1({ onNext }) {
       {showCamera && <CameraCapture onCapture={handleCameraCapture} onClose={() => setShowCamera(false)} />}
     </div>
   );
-}
+});
 
 function Step2({ kunjunganId, onNext, onBack }) {
   const [members, setMembers] = useState([]);
@@ -604,6 +751,7 @@ function Step2({ kunjunganId, onNext, onBack }) {
       if (!m.penghasilan) missingFields.push("Penghasilan");
 
       setError(`Mohon lengkapi data anggota: ${missingFields.join(", ")}`);
+      toast.error("Lengkapi data anggota keluarga");
       setLoading(false);
       return;
     }
@@ -612,6 +760,21 @@ function Step2({ kunjunganId, onNext, onBack }) {
     setLoading(true);
 
     try {
+      // --- OFFLINE FALLBACK CHECK ---
+      const isOfflineId = kunjunganId?.toString().startsWith('off_');
+
+      if (isOfflineId || !navigator.onLine) {
+        const visit = await offlineDb.getVisitById(kunjunganId);
+        if (visit) {
+          visit.members = [...members];
+          await offlineDb.saveVisit(visit);
+          localStorage.removeItem("kunjungan_draft_members");
+          toast.success("Data anggota disimpan offline 📶");
+          onNext();
+          return;
+        }
+      }
+
       for (const member of members) {
         const fd = new FormData();
         fd.append("nama", member.nama);
@@ -637,6 +800,24 @@ function Step2({ kunjunganId, onNext, onBack }) {
       onNext();
     } catch (err) {
       console.error("Step2 submit error:", err);
+
+      if (!navigator.onLine || err.message === 'Network Error') {
+        // If it was online but failed during loop
+        const visit = await offlineDb.getVisitById(kunjunganId) || {
+          offline_id: kunjunganId?.toString().startsWith('off_') ? kunjunganId : generateOfflineId(),
+          id: kunjunganId,
+          is_draft: false,
+          form: {},
+          members: [...members],
+          answers: null
+        };
+        visit.members = [...members];
+        await offlineDb.saveVisit(visit);
+        toast.success("Progres disimpan secara offline 📶");
+        onNext();
+        return;
+      }
+
       const backendErrors = err?.response?.data?.errors;
       if (backendErrors) {
         const firstErrorKey = Object.keys(backendErrors)[0];
@@ -794,6 +975,587 @@ function Step2({ kunjunganId, onNext, onBack }) {
   );
 }
 
+
+const StepMobileBiodata = forwardRef(({ onNext }, ref) => {
+  // --- STATE KEPALA KELUARGA (STEP 1) ---
+  // Lazy init from localStorage to prevent race condition overwrite
+  const [createdId, setCreatedId] = useState(() => {
+    try {
+      const saved = localStorage.getItem("kunjungan_draft_v1");
+      return saved ? JSON.parse(saved).createdId : null;
+    } catch { return null; }
+  });
+
+  const [form, setForm] = useState(() => {
+    const defaultForm = {
+      nama: "", nik: "", tanggal: "", pendidikan: "", pekerjaan: "", penghasilan: "",
+      fotoKtp: null, alamat: "", latitude: "", longitude: ""
+    };
+    try {
+      const saved = localStorage.getItem("kunjungan_draft_v1");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.form) return { ...defaultForm, ...parsed.form, fotoKtp: null };
+      }
+    } catch (e) { console.error("Draft load error", e); }
+    return defaultForm;
+  });
+
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadingGps, setLoadingGps] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState("");
+  const [error, setError] = useState("");
+  const [pekerjaanList, setPekerjaanList] = useState([]);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [showCamera, setShowCamera] = useState(false); // Untuk Kepala Keluarga
+
+  // --- STATE ANGGOTA KELUARGA (STEP 2) ---
+  const [members, setMembers] = useState(() => {
+    try {
+      const saved = localStorage.getItem("kunjungan_draft_v1");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.members) return parsed.members.map(m => ({ ...m, fotoKtp: null, previewUrl: "" }));
+      }
+    } catch { }
+    return [];
+  });
+  const [cameraMemberId, setCameraMemberId] = useState(null); // Untuk Anggota
+
+  useEffect(() => {
+    fetchPekerjaan();
+  }, []);
+
+  // --- AUTO SAVE (FIXED RACE CONDITION) ---
+  const DRAFT_KEY = "kunjungan_draft_v1";
+
+  // Save Draft on Change
+  useEffect(() => {
+    // Prevent saving empty initial state if we just barely mounted
+    // But since we use lazy init, the state is ALREADY loaded.
+    const draftData = {
+      form: { ...form, fotoKtp: undefined }, // Skip file
+      members: members.map(m => ({ ...m, fotoKtp: undefined, previewUrl: undefined })),
+      createdId
+    };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
+  }, [form, members, createdId]);
+
+  // Clear Draft Helper
+  const clearDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+  };
+
+  const fetchPekerjaan = async () => {
+    const fallbackPekerjaan = [
+      "Belum / Tidak Bekerja", "Pelajar / Mahasiswa", "PNS / ASN", "TNI / POLRI",
+      "Karyawan Swasta", "Wiraswasta", "Petani / Nelayan", "Buruh", "Pedagang",
+      "Ibu Rumah Tangga", "Pensiunan", "Lainnya"
+    ];
+    try {
+      const res = await api.get("/wilayah/pekerjaan");
+      if (res.data && res.data.length > 0) {
+        setPekerjaanList(res.data.map(item => item.nama));
+      } else {
+        setPekerjaanList(fallbackPekerjaan);
+      }
+    } catch (err) {
+      setPekerjaanList(fallbackPekerjaan);
+    }
+  };
+
+  const reverseGeocode = async (lat, lon) => {
+    try {
+      setGpsStatus("Menerjemahkan alamat...");
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      const data = await res.json();
+      if (data.display_name) {
+        setForm(prev => ({ ...prev, alamat: data.display_name }));
+      }
+    } catch (err) { }
+  };
+
+  const getLocationAndAddress = () => {
+    if (!navigator.geolocation) {
+      toast.error("Fitur Lokasi tidak didukung browser ini (Pastikan menggunakan HTTPS).");
+      return;
+    }
+    setLoadingGps(true);
+    setGpsStatus("Mencari lokasi...");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setForm(prev => ({ ...prev, latitude, longitude }));
+        reverseGeocode(latitude, longitude);
+        setLoadingGps(false);
+        setGpsStatus("✓ Lokasi terbaca");
+      },
+      (err) => {
+        setLoadingGps(false);
+        setGpsStatus("");
+        if (err.code === 1) setShowPermissionModal(true);
+      },
+      { enableHighAccuracy: false, timeout: 7000, maximumAge: 0 }
+    );
+  };
+
+  const handleRefreshGps = () => { setShowPermissionModal(false); getLocationAndAddress(); };
+
+  // Auto-detect location on mount if address is empty
+  // Auto-detect location on mount if address is empty
+  // useEffect(() => {
+  //   if (!form.alamat && !form.latitude) {
+  //     getLocationAndAddress();
+  //   }
+  // }, []);
+
+  // --- HANDLERS KEPALA KELUARGA ---
+  const handleFotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setError("Ukuran foto maksimal 5MB"); return; }
+
+    // OCR Check
+    const toastId = toast.loading("Memindai KTP (OCR)...");
+    const validation = await validateKTP(file);
+    toast.dismiss(toastId);
+
+    if (!validation.isValid) {
+      toast.error(validation.message, { duration: 5000 });
+      return;
+    }
+
+    setForm(prev => ({ ...prev, fotoKtp: file }));
+    setPreviewUrl(URL.createObjectURL(file));
+    setError("");
+  };
+
+  const handleCameraCaptureHead = async (file) => {
+    const toastId = toast.loading("Validasi Foto KTP...");
+    const validation = await validateKTP(file);
+    toast.dismiss(toastId);
+
+    if (!validation.isValid) {
+      toast.error(validation.message, { duration: 5000 });
+      return;
+    }
+
+    setForm(prev => ({ ...prev, fotoKtp: file }));
+    setPreviewUrl(URL.createObjectURL(file));
+    setError("");
+    toast.success("Foto KTP berhasil diambil");
+  };
+
+  // --- HANDLERS ANGGOTA KELUARGA ---
+  const addMember = () => {
+    setMembers([...members, {
+      id: Date.now(), nama: "", nik: "", hubungan: "", tanggalLahir: "",
+      pekerjaan: "", pendidikan: "", penghasilan: "", fotoKtp: null, previewUrl: "", isSynced: false
+    }]);
+  };
+
+  const removeMember = (id) => setMembers(members.filter(m => m.id !== id));
+  const updateMember = (id, key, value) => {
+    setMembers(prev => prev.map(m => m.id === id ? { ...m, [key]: value, isSynced: false } : m));
+  };
+
+  const handleMemberFoto = async (id, file) => {
+    if (!file) return;
+    const toastId = toast.loading("Validasi KTP Anggota...");
+    const res = await validateKTP(file);
+    toast.dismiss(toastId);
+
+    if (!res.isValid) {
+      toast.error(res.message);
+      return;
+    }
+    updateMember(id, "fotoKtp", file);
+    updateMember(id, "previewUrl", URL.createObjectURL(file));
+  };
+
+  const handleCameraCaptureMember = async (file) => {
+    if (!cameraMemberId) return;
+    const toastId = toast.loading("Validasi Foto Kamera...");
+    const res = await validateKTP(file);
+    toast.dismiss(toastId);
+
+    if (!res.isValid) {
+      toast.error(res.message);
+      return;
+    }
+    updateMember(cameraMemberId, "fotoKtp", file);
+    updateMember(cameraMemberId, "previewUrl", URL.createObjectURL(file));
+    setCameraMemberId(null);
+    toast.success("Foto KTP Anggota berhasil diambil");
+  };
+
+  useImperativeHandle(ref, () => ({
+    submitDraft: async () => {
+      // If basic data (nama/nik) is missing, don't even try to save to DB
+      if (!form.nama || !form.nik) return true;
+
+      try {
+        setLoading(true);
+        const fd = new FormData();
+        fd.append("nama", form.nama);
+        fd.append("nik", form.nik);
+        fd.append("is_draft", "1");
+
+        if (form.tanggal) fd.append("tanggal", form.tanggal);
+        if (form.pendidikan) fd.append("pendidikan", form.pendidikan);
+        if (form.pekerjaan) fd.append("pekerjaan", form.pekerjaan);
+        if (form.penghasilan) fd.append("penghasilan", form.penghasilan);
+        if (form.alamat) fd.append("alamat", form.alamat);
+        if (form.latitude) fd.append("latitude", form.latitude);
+        if (form.longitude) fd.append("longitude", form.longitude);
+
+        if (form.fotoKtp instanceof File) {
+          const compressedFoto = await compressImage(form.fotoKtp);
+          fd.append("foto_ktp", compressedFoto);
+        }
+
+        const res = await api.post("/kunjungan", fd, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+
+        return res.data.success;
+      } catch (err) {
+        console.error("Save mobile draft error:", err);
+
+        // --- OFFLINE FALLBACK ---
+        if (!navigator.onLine || err.message === 'Network Error') {
+          const offId = generateOfflineId();
+          await offlineDb.saveVisit({
+            offline_id: offId,
+            is_draft: true,
+            nama: form.nama,
+            nik: form.nik,
+            alamat: form.alamat,
+            created_at: new Date().toISOString(),
+            form: { ...form },
+            members: [],
+            answers: null
+          });
+          toast.success("Draft disimpan secara offline 📶");
+          return true;
+        }
+
+        return true;
+      } finally {
+        setLoading(false);
+      }
+    }
+  }));
+
+  // --- SUBMIT LOGIC (CHAINED & RETRY-SAFE) ---
+  const handleSubmit = async () => {
+    // 1. Validate Head
+    if (!form.nama || !form.nik || !form.tanggal || !form.pendidikan || !form.pekerjaan || !form.penghasilan || !form.alamat) {
+      setError("Mohon lengkapi data Kepala Keluarga");
+      toast.error("Lengkapi data Kepala Keluarga");
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (!form.fotoKtp && !createdId) {
+      setError("Foto KTP Kepala Keluarga wajib diupload");
+      toast.error("Foto KTP wajib diupload");
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (!/^\d{16}$/.test(form.nik)) {
+      setError("NIK Kepala Keluarga harus 16 digit");
+      toast.error("NIK harus 16 digit");
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    // 2. Validate Members
+    for (let i = 0; i < members.length; i++) {
+      const m = members[i];
+      if (!m.nama) { setError(`Anggota #${i + 1}: Nama wajib diisi`); return; }
+      if (!m.nik || !/^\d{16}$/.test(m.nik)) { setError(`Anggota #${i + 1}: NIK harus 16 digit`); return; }
+      if (!m.hubungan) { setError(`Anggota #${i + 1}: Hubungan wajib dipilih`); return; }
+      if (!m.tanggalLahir) { setError(`Anggota #${i + 1}: Tanggal Lahir wajib diisi`); return; }
+      if (!m.pendidikan) { setError(`Anggota #${i + 1}: Pendidikan wajib dipilih`); return; }
+      if (!m.penghasilan) { setError(`Anggota #${i + 1}: Penghasilan wajib dipilih`); return; }
+      if (!m.fotoKtp) { setError(`Anggota #${i + 1}: Foto KTP wajib diupload`); return; }
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      let currentId = createdId;
+      const fd = new FormData();
+
+      // Compress & Append Head Data
+      if (form.fotoKtp instanceof File) {
+        const compressedFotoHead = await compressImage(form.fotoKtp);
+        fd.append("foto_ktp", compressedFotoHead);
+      }
+
+      Object.keys(form).forEach(key => {
+        if (key === 'fotoKtp') return; // Handled above
+        if (form[key]) fd.append(key, form[key]);
+      });
+
+      // A. Submit Head (Create OR Update)
+      if (!currentId) {
+        // Create
+        const res = await api.post("/kunjungan", fd, { headers: { "Content-Type": "multipart/form-data" } });
+        if (!res.data.success || !res.data.data?.id) throw new Error(res.data.message || "Gagal membuat kunjungan");
+        currentId = res.data.data.id;
+        setCreatedId(currentId);
+      } else {
+        // Update (Retry Scenario - PUT)
+        await api.post(`/kunjungan/${currentId}?_method=PUT`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      }
+
+      // B. Submit Members (Loop - Only Unsynced)
+      const updatedMembers = [...members];
+      for (let i = 0; i < updatedMembers.length; i++) {
+        const member = updatedMembers[i];
+        if (member.isSynced) continue; // Skip if already saved
+
+        const fdMember = new FormData();
+        fdMember.append("nama", member.nama);
+        fdMember.append("nik", member.nik);
+        fdMember.append("hubungan", member.hubungan);
+        fdMember.append("tanggal_lahir", member.tanggalLahir);
+        fdMember.append("pekerjaan", member.pekerjaan || "");
+        fdMember.append("pendidikan", member.pendidikan);
+        fdMember.append("penghasilan", member.penghasilan);
+        if (member.fotoKtp instanceof File) {
+          const compressedMemberFoto = await compressImage(member.fotoKtp);
+          fdMember.append("foto_ktp", compressedMemberFoto);
+        }
+
+        await api.post(`/kunjungan/${currentId}/anggota`, fdMember, { headers: { "Content-Type": "multipart/form-data" } });
+
+        // Mark as synced immediately
+        updatedMembers[i].isSynced = true;
+        setMembers([...updatedMembers]);
+      }
+
+      // C. Done -> Next Step
+      clearDraft(); // Safe to clear now
+      onNext(currentId, form.alamat);
+
+    } catch (err) {
+      console.error(err);
+
+      // --- OFFLINE FALLBACK FOR SUBMIT ---
+      if (!navigator.onLine || err.message === 'Network Error') {
+        const offId = generateOfflineId();
+        await offlineDb.saveVisit({
+          offline_id: offId,
+          is_draft: false,
+          nama: form.nama,
+          nik: form.nik,
+          alamat: form.alamat,
+          created_at: new Date().toISOString(),
+          family_form: { members_count: members.length },
+          form: { ...form },
+          members: [...members],
+          answers: null
+        });
+        toast.success("Kunjungan disimpan offline. Silakan isi kuisioner. 📶");
+        clearDraft();
+        onNext(offId, form.alamat);
+        return;
+      }
+
+      if (err.response?.data?.errors) {
+        const backendErrors = Object.values(err.response.data.errors).flat().join(", ");
+        setError(`Validasi Gagal: ${backendErrors}`);
+      } else {
+        setError(err?.response?.data?.message || err.message || "Gagal menyimpan data");
+      }
+      window.scrollTo(0, 0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      {error && <Alert type="error" message={error} />}
+
+      {/* --- BAGIAN 1: KEPALA KELUARGA --- */}
+      <div className="bg-white p-5 rounded-xl border border-slate-300">
+        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-200">
+          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+            <Icon icon="mdi:account-tie" width="24" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">Kepala Keluarga</h2>
+            <p className="text-xs text-slate-500">Informasi utama penanggung jawab</p>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <Input label="Nama Lengkap" value={form.nama} onChange={(v) => setForm({ ...form, nama: v })} required />
+          <Input label="NIK (16 digit)" value={form.nik} onChange={(v) => /^\d{0,16}$/.test(v) && setForm({ ...form, nik: v })} maxLength={16} required />
+          <Input type="date" label="Tanggal Lahir" value={form.tanggal} max={maxDate17()} onChange={(v) => setForm({ ...form, tanggal: v })} required />
+          <div className="grid grid-cols-2 gap-3">
+            <Select label="Pendidikan" value={form.pendidikan} onChange={(v) => setForm({ ...form, pendidikan: v })} options={["SD", "SMP", "SMA/SMK", "D3", "S1", "S2+"]} required />
+            <Select label="Pekerjaan" value={form.pekerjaan} onChange={(v) => setForm({ ...form, pekerjaan: v })} options={pekerjaanList} required />
+          </div>
+          <Select label="Penghasilan" value={form.penghasilan} onChange={(v) => setForm({ ...form, penghasilan: v })} options={["< Rp500.000", "Rp500.000 - Rp1.500.000", "Rp1.500.000 - Rp3.000.000", "Rp3.000.000 - Rp5.000.000", "> Rp5.000.000"]} required />
+
+          {/* FOTO KTP HEAD */}
+          <div className="pt-2">
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Foto KTP <span className="text-red-500">*</span></label>
+            <div
+              onClick={() => setShowCamera(true)}
+              className={`relative border-2 border-dashed rounded-lg p-6 text-center cursor-pointer ${previewUrl ? 'border-green-500 bg-green-50' : 'border-blue-300 bg-blue-50 active:bg-blue-100'}`}
+            >
+              {!previewUrl ? (
+                <div className="flex flex-col items-center gap-2">
+                  <Icon icon="mdi:camera" className="text-3xl text-blue-500" />
+                  <span className="text-sm font-bold text-blue-700">Ambil Foto KTP</span>
+                  <span className="text-xs text-slate-500">Pastikan foto jelas & terbaca</span>
+                </div>
+              ) : (
+                <div className="relative">
+                  <img src={previewUrl} className="h-32 mx-auto rounded shadow-sm object-cover" alt="KTP" />
+                  <div className="mt-2 text-center">
+                    <span className="bg-green-600 text-white text-[10px] font-bold px-3 py-1 rounded-full inline-flex items-center gap-1 shadow-sm">
+                      <Icon icon="mdi:check" /> Terisi
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <button type="button" onClick={() => document.getElementById("HeadKtpInput").click()} className="w-full py-2 text-xs font-bold text-slate-500 mt-1 active:text-blue-600">
+              Atau upload dari galeri
+            </button>
+            <input id="HeadKtpInput" type="file" accept="image/*" className="hidden" onChange={handleFotoChange} />
+          </div>
+
+          <Input label="Alamat Lengkap" value={form.alamat} onChange={(v) => setForm({ ...form, alamat: v })} required />
+        </div>
+      </div>
+
+      {/* --- BAGIAN 2: ANGGOTA KELUARGA --- */}
+      <div>
+        <div className="flex justify-between items-end mb-6 border-b border-dashed border-slate-200 pb-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Icon icon="mdi:account-group-outline" className="text-blue-600" />
+              Daftar Anggota
+            </h2>
+            <p className="text-xs text-slate-500 mt-1 ml-7">Total: {members.length} Orang</p>
+          </div>
+          <button
+            onClick={addMember}
+            className="flex items-center gap-1 pl-3 pr-4 py-2 bg-blue-50 text-blue-600 rounded-full text-xs font-bold border border-blue-200 hover:bg-blue-100 transition active:scale-95"
+          >
+            <Icon icon="mdi:plus-circle" className="text-lg" />
+            Tambah
+          </button>
+        </div>
+
+        {members.length === 0 ? (
+          <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
+            <p className="text-gray-500 text-sm">Tidak ada anggota keluarga</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {members.map((member, idx) => (
+              <div key={member.id} className="bg-white rounded-xl border border-slate-300">
+                {/* Card Header - Flat Design, No Transparency */}
+                <div className="flex justify-between items-center bg-slate-50 px-4 py-3 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-blue-600 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full">
+                      {idx + 1}
+                    </span>
+                    <h4 className="font-bold text-slate-800 text-sm">Anggota Keluarga</h4>
+                  </div>
+                  <button
+                    onClick={() => removeMember(member.id)}
+                    className="text-red-500 p-2 active:bg-red-50 rounded-full" // Hit area bigger
+                    title="Hapus"
+                  >
+                    <Icon icon="mdi:trash-can-outline" width="20" />
+                  </button>
+                </div>
+
+                {/* Card Body - No transitions */}
+                <div className="p-4 space-y-4">
+                  <Input label="Nama Lengkap" value={member.nama} onChange={(v) => updateMember(member.id, "nama", v)} required placeholder="Sesuai KTP" />
+                  <Input label="NIK" value={member.nik} onChange={(v) => /^\d{0,16}$/.test(v) && updateMember(member.id, "nik", v)} maxLength={16} required placeholder="16 Digit Angka" />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Select label="Hubungan" value={member.hubungan} onChange={(v) => updateMember(member.id, "hubungan", v)} options={["Istri", "Suami", "Anak", "Orang Tua", "Mertua", "Famili Lain"]} required />
+                    <Input type="date" label="Tgl Lahir" value={member.tanggalLahir} max={maxDate17()} onChange={(v) => updateMember(member.id, "tanggalLahir", v)} required />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Select label="Pendidikan" value={member.pendidikan} onChange={(v) => updateMember(member.id, "pendidikan", v)} options={["SD", "SMP", "SMA/SMK", "D3", "S1", "S2+"]} required />
+                    <Select label="Pekerjaan" value={member.pekerjaan} onChange={(v) => updateMember(member.id, "pekerjaan", v)} options={pekerjaanList} required />
+                  </div>
+
+                  <Select label="Penghasilan" value={member.penghasilan} onChange={(v) => updateMember(member.id, "penghasilan", v)} options={["< Rp500.000", "Rp500.000 - Rp1.500.000", "Rp1.500.000 - Rp3.000.000", "Rp3.000.000 - Rp5.000.000", "> Rp5.000.000"]} required />
+
+                  {/* FOTO MEMBER - Simple Border, No Hover Scale */}
+                  <div className="pt-3 mt-2 border-t border-slate-100">
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                      Foto KTP Anggota <span className="text-red-500">*</span>
+                    </label>
+
+                    <div
+                      onClick={() => setCameraMemberId(member.id)}
+                      className={`relative border-2 border-dashed rounded-lg p-4 text-center cursor-pointer ${member.previewUrl ? 'border-green-500 bg-green-50' : 'border-slate-300 bg-slate-50 active:bg-blue-50'}`}
+                    >
+                      {!member.previewUrl ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <Icon icon="mdi:camera" className="text-2xl text-slate-400" />
+                          <span className="text-sm font-bold text-blue-600">Ambil Foto</span>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <img src={member.previewUrl} className="h-24 mx-auto rounded shadow-sm object-cover" alt="KTP" />
+                          <div className="mt-1 text-center">
+                            <span className="text-green-700 text-xs font-bold flex items-center justify-center gap-1">
+                              <Icon icon="mdi:check-circle" /> Tersimpan
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <button type="button" onClick={() => document.getElementById(`MemberKtpInput-${member.id}`).click()} className="w-full py-2 text-xs font-bold text-slate-500 mt-1 active:text-blue-600">
+                      Upload File
+                    </button>
+                  </div>
+                  <input id={`MemberKtpInput-${member.id}`} type="file" accept="image/*" className="hidden"
+                    onChange={(e) => handleMemberFoto(member.id, e.target.files?.[0])}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="sticky bottom-0 bg-white p-4 border-t border-slate-200 z-30">
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold active:bg-blue-700"
+        >
+          {loading ? <span className="flex items-center justify-center gap-2"><Icon icon="mdi:loading" className="animate-spin" /> Menyimpan...</span> : "Lanjut ke Kuisioner →"}
+        </button>
+      </div>
+
+      {showPermissionModal && <PermissionModal onRetry={handleRefreshGps} loading={loadingGps} />}
+      {showCamera && <CameraCapture onCapture={handleCameraCaptureHead} onClose={() => setShowCamera(false)} />}
+      {cameraMemberId && <CameraCapture onCapture={handleCameraCaptureMember} onClose={() => setCameraMemberId(null)} />}
+    </div>
+  );
+});
+
 function Step3({ kunjunganId, onBack, onComplete }) {
   const [answers, setAnswers] = useState({
     tau_paslon: 0,
@@ -843,6 +1605,23 @@ function Step3({ kunjunganId, onBack, onComplete }) {
     setLoading(true);
 
     try {
+      // --- OFFLINE FALLBACK CHECK ---
+      const isOfflineId = kunjunganId?.toString().startsWith('off_');
+
+      if (isOfflineId || !navigator.onLine) {
+        const visit = await offlineDb.getVisitById(kunjunganId);
+        if (visit) {
+          visit.answers = {
+            ...answers,
+            pernah_dikunjungi: answers.pernah_dikunjungi === "ya" ? 1 : 0
+          };
+          await offlineDb.saveVisit(visit);
+          toast.success("Jawaban kuisioner disimpan offline 📶");
+          onComplete();
+          return;
+        }
+      }
+
       const res = await api.post(`/kunjungan/${kunjunganId}/selesai`, {
         ...answers,
         pernah_dikunjungi: answers.pernah_dikunjungi === "ya" ? 1 : 0
@@ -855,6 +1634,28 @@ function Step3({ kunjunganId, onBack, onComplete }) {
       onComplete();
     } catch (err) {
       console.error("Step3 submit error:", err);
+
+      // --- RETRY/OFFLINE FALLBACK ON ERROR ---
+      if (!navigator.onLine || err.message === 'Network Error') {
+        const visit = await offlineDb.getVisitById(kunjunganId) || {
+          offline_id: kunjunganId?.toString().startsWith('off_') ? kunjunganId : generateOfflineId(),
+          id: kunjunganId,
+          is_draft: false,
+          form: {},
+          members: [],
+          answers: null,
+          created_at: new Date().toISOString()
+        };
+        visit.answers = {
+          ...answers,
+          pernah_dikunjungi: answers.pernah_dikunjungi === "ya" ? 1 : 0
+        };
+        await offlineDb.saveVisit(visit);
+        toast.success("Kuisioner disimpan offline 📶");
+        onComplete();
+        return;
+      }
+
       setError(err?.response?.data?.message || err.message || "Terjadi kesalahan saat menyelesaikan kunjungan");
     } finally {
       setLoading(false);
@@ -969,7 +1770,7 @@ function Step3({ kunjunganId, onBack, onComplete }) {
   );
 }
 
-function StepComplete() {
+function StepComplete({ onFinish }) {
   return (
     <div className="text-center py-12">
       <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
@@ -977,15 +1778,21 @@ function StepComplete() {
       </div>
       <h3 className="text-3xl font-bold text-gray-800 mb-3">Kunjungan Berhasil!</h3>
       <p className="text-gray-600 mb-8">Data kunjungan keluarga telah tersimpan dengan baik</p>
-      <Button onClick={() => window.location.reload()}>Buat Kunjungan Baru</Button>
+      <Button onClick={() => {
+        if (onFinish) onFinish();
+        window.location.reload();
+      }}>Buat Kunjungan Baru</Button>
     </div>
   );
 }
 
+
+// === MODERN UI COMPONENTS ===
+
 function Input({ label, type = "text", value, onChange, required, readOnly, maxLength, placeholder, disabled, max, min }) {
   return (
-    <div>
-      <label className="block font-semibold mb-2">
+    <div className="relative group">
+      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       <input
@@ -998,8 +1805,11 @@ function Input({ label, type = "text", value, onChange, required, readOnly, maxL
         placeholder={placeholder}
         max={max}
         min={min}
-        className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${readOnly || disabled ? 'bg-gray-50 cursor-not-allowed' : ''
-          }`}
+        className={`w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-800 font-medium placeholder-gray-400
+          focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-blue-50/10 
+          transition-all duration-200 ease-in-out shadow-sm
+          ${readOnly || disabled ? 'bg-gray-100/50 cursor-not-allowed text-gray-500' : ''}
+        `}
       />
     </div>
   );
@@ -1007,39 +1817,50 @@ function Input({ label, type = "text", value, onChange, required, readOnly, maxL
 
 function Select({ label, value, onChange, options, required }) {
   return (
-    <div>
-      <label className="block font-semibold mb-2">
+    <div className="relative group">
+      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
-      <select
-        value={value}
-        onChange={(e) => onChange?.(e.target.value)}
-        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-      >
-        <option value="">-- Pilih {label} --</option>
-        {options.map((opt) => (
-          <option key={opt} value={opt}>{opt}</option>
-        ))}
-      </select>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange?.(e.target.value)}
+          className="w-full appearance-none px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-800 font-medium
+            focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-blue-50/10 
+            transition-all duration-200 ease-in-out shadow-sm cursor-pointer"
+        >
+          <option value="">-- {label} --</option>
+          {options.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
+          <Icon icon="mdi:chevron-down" className="text-xl" />
+        </div>
+      </div>
     </div>
   );
 }
 
-function Button({ children, onClick, disabled = false, loading = false, variant = "primary" }) {
+function Button({ children, onClick, disabled = false, loading = false, variant = "primary", className = "" }) {
   const styles = {
-    primary: "bg-blue-600 hover:bg-blue-700 text-white",
-    outline: "border-2 border-gray-300 hover:bg-gray-50 text-gray-700"
+    primary: "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/30 active:scale-[0.98]",
+    outline: "border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-600 active:scale-[0.98]",
+    success: "bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/30 active:scale-[0.98]",
+    danger: "bg-red-50 text-red-600 hover:bg-red-100 border border-red-100"
   };
 
   return (
     <button
       onClick={onClick}
       disabled={disabled || loading}
-      className={`px-6 py-3 rounded-xl font-semibold transition ${styles[variant]} ${disabled || loading ? "opacity-50 cursor-not-allowed" : ""
-        }`}
+      className={`px-6 py-3.5 rounded-xl font-bold transition-all duration-200 flex justify-center items-center gap-2 
+        ${styles[variant] || styles.primary} 
+        ${disabled || loading ? "opacity-60 cursor-not-allowed transform-none shadow-none" : ""} 
+        ${className}`}
     >
       {loading && (
-        <Icon icon="mdi:loading" className="inline-block animate-spin mr-2" />
+        <Icon icon="mdi:loading" className="animate-spin text-xl" />
       )}
       {children}
     </button>
@@ -1068,23 +1889,23 @@ function PermissionModal({ onRetry, loading }) {
             >
               {loading ? (
                 <>
-                  <Icon icon="mdi:loading" className="animate-spin" width="20" />
-                  Mencari...
+                  <Icon icon="mdi:loading" className="animate-spin text-xl" />
+                  Mencari Lokasi...
                 </>
               ) : (
                 <>
-                  <Icon icon="mdi:check-circle" width="20" />
-                  Izinkan Akses Lokasi
+                  <Icon icon="mdi:crosshairs-gps" className="text-xl" />
+                  Coba Lagi / Izinkan
                 </>
               )}
             </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-3 px-4 bg-gray-50 text-gray-600 hover:bg-gray-100 font-bold rounded-xl transition-all"
+            >
+              Muat Ulang Halaman
+            </button>
             <div className="pt-4 mt-2 border-t border-slate-100 flex flex-col gap-2">
-              <button
-                onClick={() => window.location.reload()}
-                className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors py-2 px-3 rounded-lg hover:bg-slate-50"
-              >
-                Muat Ulang Halaman
-              </button>
               <div className="flex items-center gap-3 text-xs text-slate-300">
                 <div className="h-px bg-slate-100 flex-1"></div>
                 <span>ATAU</span>

@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 class DptSummary extends Command
 {
     protected $signature = 'dpt:summary {level=city}';
-    protected $description = 'Generate DPT summary table (city | district | village)';
+    protected $description = 'Generate DPT summary (city | district | village) using region names';
 
     public function handle()
     {
@@ -31,20 +31,17 @@ class DptSummary extends Command
         DB::insert("
             INSERT INTO dpt_summary_cities
             SELECT
-                c.province_code,
-                c.id AS city_code,
+                r.province,
+                r.city,
                 r.area_km2,
                 COUNT(d.id) AS total_dpt,
                 IF(r.area_km2 > 0, ROUND(COUNT(d.id)/r.area_km2, 2), 0),
                 NOW()
-            FROM cities c
-            JOIN provinces p ON p.id = c.province_code
-            JOIN regions r
-            ON r.level = 'CITY'
-            AND r.city = c.city
+            FROM regions r
             LEFT JOIN dpt d
-            ON d.city_code = c.id
-            GROUP BY c.province_code, c.id, r.area_km2
+                ON d.city = r.city
+            WHERE r.level = 'CITY'
+            GROUP BY r.province, r.city, r.area_km2
         ");
     }
 
@@ -54,24 +51,37 @@ class DptSummary extends Command
 
         DB::insert("
             INSERT INTO dpt_summary_districts
+            (
+                province,
+                city,
+                district,
+                area_km2,
+                total_dpt,
+                density,
+                updated_at
+            )
             SELECT
-                dct.province_code,
-                dct.city_code,
-                dct.id AS district_code,
+                r.province,
+                r.city,
+                r.district,
                 r.area_km2,
                 COUNT(d.id) AS total_dpt,
-                IF(r.area_km2 > 0, ROUND(COUNT(d.id)/r.area_km2, 2), 0),
+                IF(r.area_km2 > 0,
+                    ROUND(COUNT(d.id) / r.area_km2, 2),
+                    0
+                ) AS density,
                 NOW()
-            FROM districts dct
-            JOIN provinces p ON p.id = dct.province_code
-            JOIN cities c ON c.id = dct.city_code
-            JOIN regions r
-            ON r.level = 'DISTRICT'
-            AND r.city = c.city
-            AND r.district = dct.district
+            FROM regions r
             LEFT JOIN dpt d
-            ON d.district_code = dct.id
-            GROUP BY dct.province_code, dct.city_code, dct.id, r.area_km2
+                ON REPLACE(TRIM(UPPER(d.province)), '.', '') = REPLACE(TRIM(UPPER(r.province)), '.', '')
+            AND REPLACE(TRIM(UPPER(d.city)), '.', '')     = REPLACE(TRIM(UPPER(r.city)), '.', '')
+            AND REPLACE(TRIM(UPPER(d.district)), '.', '') = REPLACE(TRIM(UPPER(r.district)), '.', '')
+            WHERE r.level = 'DISTRICT'
+            GROUP BY
+                r.province,
+                r.city,
+                r.district,
+                r.area_km2
         ");
     }
 
@@ -81,28 +91,41 @@ class DptSummary extends Command
 
         DB::insert("
             INSERT INTO dpt_summary_villages
+            (
+                province,
+                city,
+                district,
+                village,
+                area_km2,
+                total_dpt,
+                density,
+                updated_at
+            )
             SELECT
-                v.province_code,
-                v.city_code,
-                v.district_code,
-                v.id AS village_code,
+                TRIM(UPPER(r.province)) AS province,
+                TRIM(UPPER(r.city))     AS city,
+                REPLACE(TRIM(UPPER(r.district)), '.', '') AS district,
+                TRIM(UPPER(r.village))  AS village,
                 r.area_km2,
                 COUNT(d.id) AS total_dpt,
-                IF(r.area_km2 > 0, ROUND(COUNT(d.id)/r.area_km2, 2), 0),
+                IF(r.area_km2 > 0,
+                    ROUND(COUNT(d.id) / r.area_km2, 2),
+                    0
+                ) AS density,
                 NOW()
-            FROM villages v
-            JOIN provinces p ON p.id = v.province_code
-            JOIN cities c ON c.id = v.city_code
-            JOIN districts dct ON dct.id = v.district_code
-            JOIN regions r
-            ON r.level = 'VILLAGE'
-            AND r.city = c.city
-            AND r.district = dct.district
-            AND r.village = v.village
+            FROM regions r
             LEFT JOIN dpt d
-            ON d.village_code = v.id
+                ON REPLACE(TRIM(UPPER(d.province)), '.', '') = REPLACE(TRIM(UPPER(r.province)), '.', '')
+            AND REPLACE(TRIM(UPPER(d.city)), '.', '')     = REPLACE(TRIM(UPPER(r.city)), '.', '')
+            AND REPLACE(TRIM(UPPER(d.district)), '.', '') = REPLACE(TRIM(UPPER(r.district)), '.', '')
+            AND REPLACE(TRIM(UPPER(d.village)), '.', '')  = REPLACE(TRIM(UPPER(r.village)), '.', '')
+            WHERE r.level = 'VILLAGE'
             GROUP BY
-                v.province_code, v.city_code, v.district_code, v.id, r.area_km2
+                r.province,
+                r.city,
+                r.district,
+                r.village,
+                r.area_km2
         ");
     }
 }

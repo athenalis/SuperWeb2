@@ -21,8 +21,12 @@ class Platform extends Model
     }
 
     public function contentTypes()
-{
-    return $this->belongsToMany(ContentType::class, 'content_type_platform', 'platform_id', 'content_type_id');
-}
-
+    {
+        return $this->belongsToMany(
+            ContentType::class,
+            'content_type_platforms',
+            'platform_id',
+            'content_type_id'
+        );
+    }
 }

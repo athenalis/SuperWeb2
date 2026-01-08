@@ -5,15 +5,17 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class UsedBudget extends Model
+class ContentBudget extends Model
 {
     use SoftDeletes;
 
-    protected $table = 'used_budget';
     protected $fillable = [
         'content_plan_id',
-        'budget_content',
-        'budget_ads'
+        'budget_content'
+    ];
+
+    protected $casts = [
+        'budget_content' => 'decimal:2'
     ];
 
     public function contentPlan()

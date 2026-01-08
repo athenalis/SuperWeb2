@@ -174,25 +174,22 @@ class DptController extends Controller
 
             $legend = $this->legendDensityVillage();
 
-            $rows = DB::table('dpt_summary_villages as s')
-                ->join('villages as v', 'v.id', '=', 's.village_code')
-                ->join('districts as dct', 'dct.id', '=', 's.district_code')
-                ->join('cities as c', 'c.id', '=', 's.city_code')
-                ->join('provinces as p', 'p.id', '=', 's.province_code')
+            $rows = DB::table('dpt_summary_villages')
                 ->select(
-                    'p.province',
-                    'c.city',
-                    'dct.district',
-                    'v.village',
-                    's.area_km2',
-                    's.total_dpt',
-                    's.density'
+                    'province',
+                    'city',
+                    'district',
+                    'village',
+                    'area_km2',
+                    'total_dpt',
+                    'density'
                 )
-                ->orderByDesc('s.density')
+                ->orderByDesc('density')
                 ->get();
 
             $data = $rows->map(function ($item) use ($legend) {
                 $legendInfo = $this->legendInfoFromDensity($item->density, $legend);
+
                 return [
                     'province'  => $item->province,
                     'city'      => $item->city,
@@ -223,19 +220,16 @@ class DptController extends Controller
 
             $legend = $this->legendDensityDistrict();
 
-            $rows = DB::table('dpt_summary_districts as s')
-                ->join('districts as dct', 'dct.id', '=', 's.district_code')
-                ->join('cities as c', 'c.id', '=', 's.city_code')
-                ->join('provinces as p', 'p.id', '=', 's.province_code')
+            $rows = DB::table('dpt_summary_districts')
                 ->select(
-                    'p.province',
-                    'c.city',
-                    'dct.district',
-                    's.area_km2',
-                    's.total_dpt',
-                    's.density'
+                    'province',
+                    'city',
+                    'district',
+                    'area_km2',
+                    'total_dpt',
+                    'density'
                 )
-                ->orderByDesc('s.density')
+                ->orderByDesc('density')
                 ->get();
 
             $data = $rows->map(function ($item) use ($legend) {
@@ -270,17 +264,15 @@ class DptController extends Controller
 
             $legend = $this->legendDensityCity();
 
-            $rows = DB::table('dpt_summary_cities as s')
-                ->join('cities as c', 'c.id', '=', 's.city_code')
-                ->join('provinces as p', 'p.id', '=', 's.province_code')
+            $rows = DB::table('dpt_summary_cities')
                 ->select(
-                    'p.province',
-                    'c.city',
-                    's.area_km2',
-                    's.total_dpt',
-                    's.density'
+                    'province',
+                    'city',
+                    'area_km2',
+                    'total_dpt',
+                    'density'
                 )
-                ->orderByDesc('s.density')
+                ->orderByDesc('density')
                 ->get();
 
             $data = $rows->map(function ($item) use ($legend) {

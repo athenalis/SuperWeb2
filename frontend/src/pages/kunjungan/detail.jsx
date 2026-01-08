@@ -72,6 +72,13 @@ const scaleLabels = {
 /* =========================
    MAIN COMPONENT
 ========================= */
+const getImageUrl = (path) => {
+  if (!path) return null;
+  const storageUrl = import.meta.env.VITE_STORAGE_URL;
+  if (storageUrl) return `${storageUrl}/${path}`;
+  return `${api.defaults.baseURL.replace('/api', '')}/storage/${path}`;
+};
+
 export default function KunjunganDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -167,10 +174,13 @@ export default function KunjunganDetail() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-3 w-full sm:w-auto">
-            {role === "relawan" && data.status_verifikasi === "rejected" && (
+            {/* Edit Button (Pending & Rejected) - Relaxed role check */}
+            {/* Edit Button (Pending & Rejected) - Relaxed role check */}
+            {(data.status_verifikasi === "pending" || data.status_verifikasi === "rejected") && (
               <button
                 onClick={() => navigate(`/kunjungan/${data.id}/edit`)}
                 className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-6 py-2 rounded-lg md:rounded-xl bg-amber-50 text-amber-700 border border-amber-200 font-bold text-xs md:text-sm hover:bg-amber-100 transition-colors"
+                title="Edit Data"
               >
                 <Icon icon="mdi:pencil" width="16" className="md:w-5 md:h-5" />
                 <span className="hidden sm:inline">Edit Data</span>
@@ -226,6 +236,7 @@ export default function KunjunganDetail() {
                     <table className="w-full text-left">
                       <thead className="bg-slate-50 text-slate-600 text-xs font-bold uppercase">
                         <tr>
+                          <th className="px-4 py-3">Foto</th>
                           <th className="px-4 py-3">Nama</th>
                           <th className="px-4 py-3">NIK</th>
                           <th className="px-4 py-3">Hubungan</th>
@@ -235,6 +246,16 @@ export default function KunjunganDetail() {
                       <tbody className="divide-y text-sm">
                         {data.family_form.members.map((m) => (
                           <tr key={m.id}>
+                            <td className="px-4 py-2">
+                              {m.foto_ktp ? (
+                                <img
+                                  src={getImageUrl(m.foto_ktp)}
+                                  className="w-10 h-6 object-cover rounded bg-gray-200 cursor-pointer hover:scale-150 transition-transform origin-left"
+                                  alt="KTP"
+                                  onClick={() => window.open(getImageUrl(m.foto_ktp), '_blank')}
+                                />
+                              ) : <span className="text-xs text-gray-300 italic">No Img</span>}
+                            </td>
                             <td className="px-4 py-3 font-semibold text-slate-800">{m.nama}</td>
                             <td className="px-4 py-3 text-slate-600 font-mono text-xs">{m.nik}</td>
                             <td className="px-4 py-3 text-slate-600 capitalize">{m.hubungan}</td>
@@ -248,18 +269,35 @@ export default function KunjunganDetail() {
                   {/* MOBILE CARDS */}
                   <div className="md:hidden space-y-2">
                     {data.family_form.members.map((m) => (
-                      <div key={m.id} className="bg-slate-50 border rounded-lg p-3 space-y-1">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <div className="font-bold text-sm text-slate-900">{m.nama}</div>
-                            <div className="text-[10px] text-slate-500 font-mono">{m.nik}</div>
+                      <div key={m.id} className="bg-slate-50 border rounded-lg p-3 space-y-2">
+                        <div className="flex gap-3">
+                          <div className="shrink-0">
+                            {m.foto_ktp ? (
+                              <img
+                                src={getImageUrl(m.foto_ktp)}
+                                className="w-12 h-12 object-cover rounded-lg bg-gray-200"
+                                alt="KTP"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400">
+                                <Icon icon="mdi:camera-off" width="16" />
+                              </div>
+                            )}
                           </div>
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[9px] font-bold uppercase">
-                            {m.hubungan}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-slate-600">
-                          <span className="font-semibold">{m.umur} Tahun</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <div className="font-bold text-sm text-slate-900 truncate">{m.nama}</div>
+                                <div className="text-[10px] text-slate-500 font-mono">{m.nik}</div>
+                              </div>
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[9px] font-bold uppercase shrink-0">
+                                {m.hubungan} || {m.umur} Thn
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-600 mt-1">
+                              {m.pendidikan} • {m.pekerjaan}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -302,7 +340,7 @@ export default function KunjunganDetail() {
             {data.foto_ktp ? (
               <div className="rounded-lg md:rounded-xl overflow-hidden border shadow-inner">
                 <img
-                  src={`http://192.168.1.29:9000/storage/${data.foto_ktp}`}
+                  src={`http://192.168.1.24:9000/storage/${data.foto_ktp}`}
                   alt="KTP Head Of Family"
                   className="w-full h-auto object-contain bg-slate-100 min-h-[150px] md:min-h-[200px]"
                   onError={(e) => {

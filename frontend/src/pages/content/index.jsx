@@ -1,11 +1,9 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { Icon } from "@iconify/react";
-import { useNavigate } from "react-router-dom"; // ✅ import navigate
+import { useNavigate } from "react-router-dom"; // import navigate
 import api from "../../lib/axios";
 
-/* =========================
-   STATUS MASTER (WAJIB TAMPIL)
-========================= */
+/* ========================= STATUS MASTER (WAJIB TAMPIL) ========================= */
 const STATUS_MASTER = [
   { label: "Terjadwal", icon: "material-symbols:calendar-month" },
   { label: "Sedang Dibuat", icon: "mdi:pencil" },
@@ -15,9 +13,7 @@ const STATUS_MASTER = [
   { label: "Diblokir", icon: "mdi:block-helper" },
 ];
 
-/* =========================
-   PLATFORM ICON MAP
-========================= */
+/* ========================= PLATFORM ICON MAP ========================= */
 const PLATFORM_ICON = {
   ig: { icon: "skill-icons:instagram", color: "text-pink-500" },
   tt: { icon: "logos:tiktok-icon", color: "text-black" },
@@ -25,6 +21,16 @@ const PLATFORM_ICON = {
   fb: { icon: "logos:facebook", color: "text-blue-600" },
   x: { icon: "devicon:twitter", color: "text-black" },
 };
+
+const statusStyle = {
+  Diposting: "bg-green-100 text-green-800",
+  Terjadwal: "bg-blue-100 text-blue-800",
+  Diblokir: "bg-[#0f172a] text-white",
+  Dibatalkan: "bg-red-100 text-red-800",
+  "Sedang Dibuat": "bg-yellow-100 text-yellow-800",
+  Draf: "bg-gray-100 text-gray-800",
+};
+
 
 const PLATFORM_NAME_TO_CODE = {
   Instagram: "ig",
@@ -37,7 +43,7 @@ const PLATFORM_NAME_TO_CODE = {
 };
 
 export default function Index() {
-  const navigate = useNavigate(); // ✅ inisialisasi navigate
+  const navigate = useNavigate(); // inisialisasi navigate
   const [plans, setPlans] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
@@ -47,15 +53,13 @@ export default function Index() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(5);
   const [budgetSummary, setBudgetSummary] = useState({
-  total_budget: 0,
-  used_budget: { content: 0, ads: 0, total: 0 },
-  remaining_budget: 0,
-});
+    total_budget: 0,
+    used_budget: { content: 0, ads: 0, total: 0 },
+    remaining_budget: 0,
+  });
 
 
-  /* =========================
-     FETCH DATA
-  ========================= */
+  /* ========================= FETCH DATA ========================= */
   const fetchData = () => {
     setLoading(true);
     Promise.all([
@@ -77,79 +81,75 @@ export default function Index() {
     fetchData();
   }, []);
 
-/* =========================
-          FILTER & SORT
-========================= */
-const filteredPlans = useMemo(() => {
-  let filtered = [...plans];
+  /* ========================= FILTER & SORT ========================= */
+  const filteredPlans = useMemo(() => {
+    let filtered = [...plans];
 
-  if (statusFilter) {
-    filtered = filtered.filter(
-      (p) => p.status?.label === statusFilter
+    if (statusFilter) {
+      filtered = filtered.filter(
+        (p) => p.status?.label === statusFilter
+      );
+    }
+
+    if (searchTitle.trim()) {
+      filtered = filtered.filter((p) =>
+        p.title
+          ?.toLowerCase()
+          .includes(searchTitle.toLowerCase())
+      );
+    }
+
+    return filtered;
+  }, [plans, statusFilter, searchTitle]);
+
+
+  const displayedPlans = useMemo(() => {
+    let data = [...filteredPlans];
+
+    if (sortKey === "tanggal") {
+      data.sort(
+        (a, b) =>
+          new Date(a.posting_date).getTime() -
+          new Date(b.posting_date).getTime()
+      );
+    }
+
+    if (sortKey === "budget") {
+      data.sort((a, b) => {
+        const budgetA =
+          Number(a.used_budget?.budget_content || 0) +
+          Number(a.used_budget?.budget_ads || 0);
+
+        const budgetB =
+          Number(b.used_budget?.budget_content || 0) +
+          Number(b.used_budget?.budget_ads || 0);
+
+        return budgetA - budgetB;
+      });
+    }
+
+    return data.slice(
+      (page - 1) * perPage,
+      page * perPage
     );
-  }
+  }, [filteredPlans, sortKey, page, perPage]);
 
-  if (searchTitle.trim()) {
-    filtered = filtered.filter((p) =>
-      p.title
-        ?.toLowerCase()
-        .includes(searchTitle.toLowerCase())
-    );
-  }
-
-  return filtered;
-}, [plans, statusFilter, searchTitle]);
-
-
-const displayedPlans = useMemo(() => {
-  let data = [...filteredPlans];
-
-  if (sortKey === "tanggal") {
-    data.sort(
-      (a, b) =>
-        new Date(a.posting_date).getTime() -
-        new Date(b.posting_date).getTime()
-    );
-  }
-
-  if (sortKey === "budget") {
-    data.sort((a, b) => {
-      const budgetA =
-        Number(a.used_budget?.budget_content || 0) +
-        Number(a.used_budget?.budget_ads || 0);
-
-      const budgetB =
-        Number(b.used_budget?.budget_content || 0) +
-        Number(b.used_budget?.budget_ads || 0);
-
-      return budgetA - budgetB;
-    });
-  }
-
-  return data.slice(
-    (page - 1) * perPage,
-    page * perPage
+  const totalPage = Math.max(
+    1,
+    Math.ceil(filteredPlans.length / perPage)
   );
-}, [filteredPlans, sortKey, page, perPage]);
 
-const totalPage = Math.max(
-  1,
-  Math.ceil(filteredPlans.length / perPage)
-);
+  const pages = Array.from({ length: totalPage }, (_, i) => i + 1);
 
-const pages = Array.from({ length: totalPage }, (_, i) => i + 1);
-
-useEffect(() => {
-  if (page > totalPage) {
-    setPage(1);
-  }
-}, [totalPage]);
+  useEffect(() => {
+    if (page > totalPage) {
+      setPage(1);
+    }
+  }, [totalPage]);
 
 
 
-  /* =========================
-   DELETE MODAL STATE & FN
-  ========================= */
+  /* ========================= DELETE MODAL STATE & FN ========================= */
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -192,7 +192,7 @@ useEffect(() => {
           <p className="text-sm opacity-90 mt-1"></p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex items-center justify-center gap-2">
 
           <button
             className="bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800"
@@ -250,32 +250,32 @@ useEffect(() => {
       </div> */}
 
       {/* ================= STATISTIK STATUS (COMPACT) ================= */}
-<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-  {STATUS_MASTER.map((status) => (
-    <div
-      key={status.label}
-      className="bg-white border rounded-xl px-4 py-3 
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {STATUS_MASTER.map((status) => (
+          <div
+            key={status.label}
+            className="bg-white border rounded-xl px-4 py-3 
                  flex items-center gap-3"
-    >
-      <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center">
-        <Icon
-          icon={status.icon}
-          width={18}
-          className="text-slate-600"
-        />
-      </div>
+          >
+            <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center">
+              <Icon
+                icon={status.icon}
+                width={18}
+                className="text-slate-600"
+              />
+            </div>
 
-      <div>
-        <div className="text-lg font-bold text-slate-800">
-          {stats[status.label] || 0}
-        </div>
-        <div className="text-xs text-slate-500">
-          {status.label}
-        </div>
+            <div>
+              <div className="text-lg font-bold text-slate-800">
+                {stats[status.label] || 0}
+              </div>
+              <div className="text-xs text-slate-500">
+                {status.label}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
-    </div>
-  ))}
-</div>
 
 
       {/* ================= FILTER DATA ================= */}
@@ -287,55 +287,55 @@ useEffect(() => {
             <p className="text-sm text-slate-500">Cari data berdasarkan kriteria</p>
           </div>
         </div>
-<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-  {/* SEARCH TITLE */}
-  <input
-    type="text"
-    value={searchTitle}
-    onChange={(e) => {
-      setSearchTitle(e.target.value);
-      setPage(1); // reset pagination
-    }}
-    placeholder="Cari judul konten..."
-    className="border rounded-lg px-4 py-3 w-full"
-  />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* SEARCH TITLE */}
+          <input
+            type="text"
+            value={searchTitle}
+            onChange={(e) => {
+              setSearchTitle(e.target.value);
+              setPage(1); // reset pagination
+            }}
+            placeholder="Cari judul konten..."
+            className="border rounded-lg px-4 py-3 w-full"
+          />
 
-  {/* FILTER STATUS */}
-  <select
-    value={statusFilter}
-    onChange={(e) => {
-      setStatusFilter(e.target.value);
-      setPage(1);
-    }}
-    className="border rounded-lg px-4 py-3"
-  >
-    <option value="">Semua Status</option>
-    {STATUS_MASTER.map((s) => (
-      <option key={s.label} value={s.label}>
-        {s.label}
-      </option>
-    ))}
-  </select>
-</div>
+          {/* FILTER STATUS */}
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            className="border rounded-lg px-4 py-3"
+          >
+            <option value="">Semua Status</option>
+            {STATUS_MASTER.map((s) => (
+              <option key={s.label} value={s.label}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
       </div>
 
 
       {/* ================= PER PAGE ================= */}
-    <div className="flex items-center gap-2 text-sm">
-      <span>Tampilkan</span>
-      <select
-        value={perPage}
-        onChange={(e) => setPerPage(Number(e.target.value))}
-        className="border rounded-lg px-3 py-1"
-      >
-        <option value={5}>5</option>
-        <option value={10}>10</option>
-        <option value={25}>25</option>
-        <option value={50}>50</option>
-      </select>
-      <span>data</span>
-    </div>
+      <div className="flex items-center gap-2 text-sm">
+        <span>Tampilkan</span>
+        <select
+          value={perPage}
+          onChange={(e) => setPerPage(Number(e.target.value))}
+          className="border rounded-lg px-3 py-1"
+        >
+          <option value={5}>5</option>
+          <option value={10}>10</option>
+          <option value={25}>25</option>
+          <option value={50}>50</option>
+        </select>
+        <span>data</span>
+      </div>
 
 
 
@@ -345,12 +345,13 @@ useEffect(() => {
         <table className="w-full text-base">
           <thead className="bg-slate-100">
             <tr>
+              <th className="px-4 py-3 text-left">No</th>
               <th className="px-4 py-3 text-left">Judul</th>
-              <th className="px-4 py-3 text-left hidden md:table-cell">Tipe</th>
-              <th className="px-4 py-3 text-left hidden md:table-cell">Platform</th>
-              <th className="px-4 py-3 text-left hidden md:table-cell">Tanggal</th>
-              <th className="px-4 py-3 text-left hidden md:table-cell">Status</th>
-              <th className="px-4 py-3 text-left hidden md:table-cell">Budget</th>
+              <th className="px-4 py-3 text-left">Platform</th>
+              <th className="px-4 py-3 text-left">Tanggal Posting</th>
+              <th className="px-4 py-3 text-center">Ads</th>
+              <th className="px-4 py-3 text-left">Total Budget</th>
+              <th className="px-4 py-3 text-center">Status</th>
               <th className="px-4 py-3 text-left">Aksi</th>
             </tr>
           </thead>
@@ -364,90 +365,90 @@ useEffect(() => {
               </tr>
             )}
 
-            {!loading && displayedPlans.length === 0 && (
-              <tr>
-                <td colSpan="7" className="py-12 text-center">
-                  <div className="flex flex-col items-center gap-2 text-slate-500">
-                    <div className="text-lg font-medium text-slate-700">
-                      Data tidak ditemukan
-                    </div>
-                    <div className="text-sm">
-                      Coba ubah kata kunci pencarian atau filter status
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            )}
-
             {!loading &&
-              displayedPlans.map((item) => {
-                const used = item.used_budget || item.used_budget_with_trashed;
-
-                const totalBudget =
-                  Number(used?.budget_content || 0) +
-                  Number(used?.budget_ads || 0);
+              displayedPlans.map((item, index) => {
+                const totalBudget = getTotalBudget(item);
 
                 return (
                   <tr key={item.id} className="border-t hover:bg-slate-50">
-                    <td className="px-5 py-4 font-medium max-w-[180px] whitespace-normal break-words">{item.title}</td>
-                    <td className="px-5 py-4 hidden max-w-[170px] md:table-cell">
-                      {getContentTypes(item)}
+                    {/* NO */}
+                    <td className="px-4 py-3">
+                      {(page - 1) * perPage + index + 1}
                     </td>
-                    <td className="px-5 py-4 hidden md:table-cell">
-                      <div className="flex items-center gap-2">
-                        {item.platforms?.map((p) => {
-                          const code = PLATFORM_NAME_TO_CODE[p.name]; // <— ambil code dari name
-                          const cfg = PLATFORM_ICON[code];
-                          if (!cfg) return null;
 
-                          return (
-                            <div
-                              key={p.id}
-                              className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"
-                              title={p.name}
-                            >
-                              <Icon icon={cfg.icon} className={`text-lg ${cfg.color}`} />
-                            </div>
-                          );
-                        })}
+                    {/* JUDUL */}
+                    <td className="px-4 py-3 max-w-[260px]">
+                      <p className="font-medium leading-snug line-clamp-2">
+                        {item.title}
+                      </p>
+                    </td>
+
+                    {/* PLATFORM (ICON) */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {getPlatformIcons(item)}
                       </div>
                     </td>
-                    <td className="px-5 py-4 hidden md:table-cell">
-                      {item.posting_date || "-"}
+
+                    {/* TIPE */}
+                    {/* <td className="px-4 py-3">
+                      {getContentTypes(item)}
+                    </td> */}
+                    
+                    {/* TANGGAL */}
+                    <td className="px-4 py-3 max-w-[50px]">
+                      {item.posting_date
+                        ? new Date(item.posting_date).toLocaleDateString("id-ID")
+                        : "-"}
                     </td>
-                    <td className="px-5 py-4 hidden md:table-cell">
-                      <span
-                        className={`px-4 py-1.5 rounded-full text-sm ${item.status?.label === "Diposting"
-                          ? "bg-green-100 text-green-700"
-                          : item.status?.label === "Dibatalkan"
-                            ? "bg-red-100 text-red-700"
-                            : "bg-slate-100 text-slate-700"
-                          }`}
-                      >
-                        {item.status?.label || "-"}
-                      </span>
+
+                    {/* ADS */}
+                    <td className="px-4 py-3 text-center ">
+                      {hasAds(item) ? (
+                        <span className="text-green-600 font-semibold">Ya</span>
+                      ) : (
+                        <span className="text-red-500 font-semibold">Tidak</span>
+                      )}
                     </td>
-                    <td className="px-5 py-4 hidden md:table-cell font-semibold">
+
+                    {/* TOTAL BUDGET */}
+                    <td className="px-4 py-3 font-semibold">
                       Rp {totalBudget.toLocaleString("id-ID")}
                     </td>
-                    
-                    {/* (AKSI) */}
-                    <td className="px-5 py-4">
-                      <div className="flex flex-wrap gap-2 justify-start">
-                      <button
+
+                    {/* STATUS */}
+                    <td className="px-4 py-3">
+                      <div className="flex justify-center">
+                        <span
+                          className={`px-3 py-1 rounded-full text-sm font-medium ${
+                            statusStyle[item.status?.label] ||
+                            "bg-slate-100 text-slate-700 border border-slate-200"
+                          }`}
+                        >
+                          {item.status?.label || "-"}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* AKSI */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
                           onClick={() => navigate(`/content/${item.id}/analytic`)}
                           className="w-9 h-9 flex items-center justify-center
-                                rounded-lg text-purple-600 border border-purple-600
-                                hover:bg-purple-600 hover:text-white transition"
-                          ><Icon icon="stash:chart-trend-up" width={35} />
+                         rounded-lg text-purple-600 border border-purple-600
+                         hover:bg-purple-600 hover:text-white"
+                        >
+                          <Icon icon="stash:chart-trend-up" width={35} />
                         </button>
 
                         <button
                           onClick={() => navigate(`/content/${item.id}`)}
                           className="w-9 h-9 flex items-center justify-center
-                                rounded-lg text-blue-600 border border-blue-600
-                                hover:bg-blue-600 hover:text-white transition"
-                          > <Icon icon="si:eye-line" width={20} />
+                         rounded-lg text-blue-600 border border-blue-600
+                         hover:bg-blue-600 hover:text-white"
+                        >
+                          <Icon icon="si:eye-line" width={20} />
                         </button>
                       </div>
                     </td>
@@ -562,3 +563,67 @@ function getContentTypes(item) {
     .filter(Boolean)
     .join(", ");
 }
+
+function getPlatformWithType(item) {
+  if (!item.content_platforms?.length) return "-";
+
+  return item.content_platforms
+    .map((cp) => {
+      const platform = cp.platform?.name;
+      const type = cp.content_type?.name;
+
+      if (!platform || !type) return null;
+
+      return `${platform} - ${type}`;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+function hasAds(item) {
+  return item.content_platforms?.some(
+    (cp) => cp.ads && cp.ads.is_ads
+  );
+}
+
+function getTotalBudget(item) {
+  const contentBudget = Number(
+    item.budget_with_trashed?.budget_content || 0
+  );
+
+  const adsBudget =
+    item.content_platforms?.reduce((sum, cp) => {
+      return sum + Number(cp.ads?.budget_ads || 0);
+    }, 0) || 0;
+
+  return contentBudget + adsBudget;
+}
+
+function getPlatformIcons(item) {
+  if (!item.content_platforms?.length) return "-";
+
+  const used = new Set();
+
+  return item.content_platforms
+    .map((cp, index) => {
+      const platformName = cp.platform?.name;
+      if (!platformName) return null;
+
+      const code = PLATFORM_NAME_TO_CODE[platformName];
+      if (!code || !PLATFORM_ICON[code]) return null;
+
+      // cegah icon dobel
+      if (used.has(code)) return null;
+      used.add(code);
+
+      return (
+        <Icon
+          key={index}
+          icon={PLATFORM_ICON[code].icon}
+          width={20}
+        />
+      );
+    })
+    .filter(Boolean);
+}
+

@@ -21,6 +21,10 @@ class ContentPlatform extends Model
         return $this->hasMany(Engagement::class);
     }
 
+    public function contentType()
+    {
+        return $this->belongsTo(ContentType::class, 'content_type_id');
+    }
     public function contentPlan()
     {
         return $this->belongsTo(ContentPlan::class);
@@ -29,5 +33,10 @@ class ContentPlatform extends Model
     public function platform()
     {
         return $this->belongsTo(Platform::class);
+    }
+
+    public function ads()
+    {
+        return $this->hasOne(ContentPlatformAd::class)->withTrashed();
     }
 }
