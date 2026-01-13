@@ -119,9 +119,21 @@ export default function RelawanDetail() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-400">
-        <Icon icon="svg-spinners:180-ring-with-bg" width="40" className="mb-3" />
-        <p>Memuat profil relawan...</p>
+      <div className="fixed inset-0 bg-slate-100 z-50 flex items-center justify-center">
+        <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-blue-200 rounded-full animate-spin border-t-blue-900"></div>
+            <Icon
+              icon="mdi:account-group"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-900"
+              width="28"
+            />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-slate-800">Memuat Data</p>
+            <p className="text-sm text-slate-500">Mohon tunggu sebentar...</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -213,9 +225,6 @@ export default function RelawanDetail() {
             </div>
           </div>
         </div>
-
-
-
       </div>
     </div>
   );

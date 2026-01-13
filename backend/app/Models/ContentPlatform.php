@@ -7,15 +7,20 @@ use Illuminate\Database\Eloquent\Model;
 class ContentPlatform extends Model
 {
     protected $table = 'content_platforms';
+
     protected $fillable = [
         'content_plan_id',
         'platform_id',
         'content_type_id',
-        'link'
+        'is_collaborator', // ✅ WAJIB
+        'link',
+    ];
+
+    protected $casts = [
+        'is_collaborator' => 'boolean', // ✅ WAJIB
     ];
 
     public $timestamps = false;
-
     public function engagements()
     {
         return $this->hasMany(Engagement::class);
@@ -37,6 +42,8 @@ class ContentPlatform extends Model
 
     public function ads()
     {
-        return $this->hasOne(ContentPlatformAd::class)->withTrashed();
+        return $this->hasMany(ContentPlatformAd::class, 'platform_id', 'platform_id')
+            ->where('content_plan_id', $this->content_plan_id)
+            ->withTrashed();
     }
 }

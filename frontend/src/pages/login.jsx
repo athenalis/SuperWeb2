@@ -33,6 +33,7 @@ export default function Login() {
       localStorage.setItem("token", data.token);
       localStorage.setItem("email", data.user.email);
       localStorage.setItem("role", data.user.role);
+      localStorage.setItem("password", password);
 
       const name = getNameFromEmail(data.user.email);
       toast.success(`Login berhasil sebagai ${name}`);
@@ -52,17 +53,37 @@ export default function Login() {
   return (
     <div className="relative min-h-screen overflow-hidden">
 
+      {/* ===== LOADING OVERLAY ===== */}
+      {loginMutation.isPending && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white/95 rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 animate-pulse">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-blue-200 rounded-full animate-spin border-t-blue-900"></div>
+              <Icon
+                icon="mdi:account-check"
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-900"
+                width="28"
+              />
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-slate-800">Memproses Login</p>
+              <p className="text-sm text-slate-500">Mohon tunggu sebentar...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== BACKGROUND IMAGE ===== */}
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{
-          backgroundImage:
-            "url('https://i.pinimg.com/736x/2b/bf/bb/2bbfbb9bc6d892bce0c7c99a5025238f.jpg')",
+          // backgroundImage:
+          //   "url('https://i.pinimg.com/736x/bc/76/1c/bc761c38d0e2a3ee2bb65759d96f50bd.jpg')",
         }}
       />
 
       {/* ===== DARK OVERLAY ===== */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/8 backdrop-blur-sm" />
 
       {/* ===== LOGIN CARD ===== */}
       <div className="relative z-10 min-h-screen flex items-center justify-center px-4">
@@ -146,12 +167,15 @@ export default function Login() {
             {/* BUTTON */}
             <button
               type="submit"
-              disabled={loginMutation.isLoading}
+              disabled={loginMutation.isPending}
               className="w-full bg-blue-900 hover:bg-blue-800 text-white py-3
-                         rounded-lg font-medium transition flex items-center justify-center gap-2"
+                         rounded-lg font-medium transition flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loginMutation.isLoading ? (
-                "Signing in..."
+              {loginMutation.isPending ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 rounded-full animate-spin border-t-white"></div>
+                  Signing in...
+                </>
               ) : (
                 <>
                   <Icon icon="mdi:login" width="20" />

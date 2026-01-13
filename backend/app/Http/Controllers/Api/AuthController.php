@@ -8,84 +8,157 @@ use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
+    /**
+     * =======================
+     * LOGIN
+     * =======================
+     */
     public function login(Request $request)
     {
         $request->validate([
-            'email' => 'required|email',
+            'email'    => 'required|email',
             'password' => 'required'
         ]);
 
         if (!Auth::attempt($request->only('email', 'password'))) {
             return response()->json([
+                'status'  => false,
                 'message' => 'Email atau password salah'
             ], 401);
         }
 
         $user = Auth::user();
-    
 
+        // 🔄 UPDATE STATUS USER
+        $user->update([
+            'status' => 'active'
+        ]);
 
-// BUAT TOKEN BARU
-$token = $user->createToken('api-token')->plainTextToken;
+        // 🔄 UPDATE STATUS BERDASARKAN ROLE
+        if ($user->role === 'koordinator' && $user->koordinator) {
+            $user->koordinator->update([
+                'status' => 'active'
+            ]);
+        }
 
-// Kirim data aman
-return response()->json([
-    'status' => true,
-    'token' => $token,
-    'user' => [
-        'id' => $user->id,
-        'name' => $user->name,
-        'email' => $user->email,
-        'role' => $user->role,
-        'status' => $user->status
-    ]
-]);
+        if ($user->role === 'relawan' && $user->relawan) {
+            $user->relawan->update([
+                'status' => 'active'
+            ]);
+        }
 
-    }
-
-      public function me(Request $request)
-    {
-        $user = $request->user();
+        // 🔐 BUAT TOKEN BARU (SANCTUM)
+        $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([
             'status' => true,
-            'data' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
+            'token'  => $token,
+            'user'   => [
+                'id'     => $user->id,
+                'name'   => $user->name,
+                'email'  => $user->email,
+                'role'   => $user->role,
                 'status' => $user->status
             ]
         ]);
     }
 
+    /**
+     * =======================
+     * LOGOUT
+     * =======================
+     */
+    public function logout(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unauthorized',
+                'token_header' => $request->header('Authorization'),
+            ], 401);
+        }
+
+        // 🔄 UPDATE STATUS USER
+        $user->update([
+            'status' => 'inactive'
+        ]);
+
+        // 🔄 UPDATE STATUS BERDASARKAN ROLE
+        if ($user->role === 'koordinator' && $user->koordinator) {
+            $user->koordinator->update([
+                'status' => 'inactive'
+            ]);
+        }
+
+        if ($user->role === 'relawan' && $user->relawan) {
+            $user->relawan->update([
+                'status' => 'inactive'
+            ]);
+        }
+
+        // 🧨 HAPUS TOKEN AKTIF
+        $user->currentAccessToken()->delete();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Berhasil logout',
+            'token_header' => $request->header('Authorization'),
+        ]);
+    }
+
+    /**
+     * =======================
+     * ME (PROFILE)
+     * =======================
+     */
+    public function me(Request $request)
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'status' => true,
+            'data'   => [
+                'id'     => $user->id,
+                'name'   => $user->name,
+                'email'  => $user->email,
+                'role'   => $user->role,
+                'status' => $user->status
+            ]
+        ]);
+    }
+
+    /**
+     * =======================
+     * WILAYAH (KHUSUS KOORDINATOR)
+     * =======================
+     */
     public function wilayah(Request $request)
     {
         $user = $request->user();
 
         if ($user->role !== 'koordinator') {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Unauthorized'
             ], 403);
         }
 
-        $koordinator = $user->koordinator;
-
-        if (!$koordinator) {
+        if (!$user->koordinator) {
             return response()->json([
-                'status' => false,
+                'status'  => false,
                 'message' => 'Akun koordinator tidak valid'
             ], 404);
         }
 
         return response()->json([
             'status' => true,
-            'data' => [
-                'province' => $koordinator->province,
-                'city'     => $koordinator->city,
-                'district' => $koordinator->district,
-                'village'  => $koordinator->village,
+            'data'   => [
+                'province' => $user->koordinator->province,
+                'city'     => $user->koordinator->city,
+                'district' => $user->koordinator->district,
+                'village'  => $user->koordinator->village,
             ]
         ]);
     }

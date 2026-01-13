@@ -129,6 +129,29 @@ const getVillageKey = (name = "") => {
   return VILLAGE_ALIAS[raw] || raw;
 };
 
+const getPriorityTextColor = (hexColor = "#ffffff") => {
+  const color = hexColor.toLowerCase();
+
+  if (color === "#acacac" || color === "#acacacff") {
+    return "#ffffff";
+  }
+
+  if (color === "#ffffb2") {
+    return "#5c3a00";
+  }
+
+  if (color === "#fecc5c") {
+    return "#5c3a00";
+  }
+
+  if (color === "#fd8d3c") {
+    return "#ffffff";
+  }
+
+  return "#ffffff";
+};
+
+
 /* =======================
    ZOOM HANDLER
 ======================= */
@@ -413,9 +436,23 @@ export default function MapDpt({
           <span>Kepadatan</span>
           <span>${fmt(data.density)} /km²</span>
          </div>
-         <div style="margin-top:4px;font-size:11px;color:${data.color};font-weight:600">
-           ${data.priority || ""}
-         </div>
+        <div style="margin-top:6px">
+          <span
+            style="
+              display:inline-block;
+              padding:2px 8px;
+              border-radius:999px;
+              background:${data.color};
+              color:${getPriorityTextColor(data.color)};
+              font-size:10px;
+              font-weight:600;
+              line-height:1.4;
+              white-space:nowrap;
+            "
+          >
+            ${data.priority || ""}
+          </span>
+        </div>
       `;
     } else {
       html += `<i style="color:#6b7280">Data tidak tersedia</i>`;

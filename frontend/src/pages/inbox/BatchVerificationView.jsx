@@ -12,6 +12,7 @@ export default function BatchVerificationView({ notification, onComplete }) {
     const data = notification?.data || {};
     const relawanId = data.relawan_id;
     const relawanNama = data.relawan_nama;
+    const [zoomImage, setZoomImage] = useState(null);
 
     useEffect(() => {
         if (relawanId) {
@@ -139,9 +140,17 @@ export default function BatchVerificationView({ notification, onComplete }) {
                     <div key={item.id} className="border border-slate-200 rounded-xl p-4 hover:border-blue-300 transition-all shadow-sm bg-white">
                         <div className="flex gap-4">
                             {/* Foto Display - Placeholder or real if available */}
-                            <div className="w-24 h-24 bg-slate-100 rounded-lg flex-shrink-0 overflow-hidden border border-slate-200">
+                            <div
+                                className="w-32 h-32 bg-slate-100 rounded-lg flex-shrink-0 overflow-hidden border border-slate-200 cursor-zoom-in relative group"
+                                onClick={() => item.foto_ktp && setZoomImage(`${(import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:9000/api`).replace('/api', '')}/storage/${item.foto_ktp}`)}
+                            >
                                 {item.foto_ktp ? (
-                                    <img src={`${(import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:9000/api`).replace('/api', '')}/storage/${item.foto_ktp}`} alt="Kunjungan" className="w-full h-full object-cover" />
+                                    <>
+                                        <img src={`${(import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:9000/api`).replace('/api', '')}/storage/${item.foto_ktp}`} alt="Kunjungan" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/10 transition-colors">
+                                            <Icon icon="mdi:magnify-plus" className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" width="24" />
+                                        </div>
+                                    </>
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-slate-300">
                                         <Icon icon="mdi:image-off" width="24" />
@@ -159,7 +168,29 @@ export default function BatchVerificationView({ notification, onComplete }) {
                                     <span className="flex items-center gap-1">
                                         <Icon icon="mdi:map-marker-outline" width="14" /> {item.alamat}
                                     </span>
+                                    {(item.latitude && item.longitude) && (
+                                        <a
+                                            href={`https://www.google.com/maps/search/?api=1&query=${item.latitude},${item.longitude}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 transition w-fit mt-1"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <Icon icon="mdi:map-search-outline" /> Lihat Lokasi
+                                        </a>
+                                    )}
                                 </div>
+
+                                {/* Revision History */}
+                                {item.komentar_verifikasi && (
+                                    <div className="bg-orange-50 border border-orange-100 text-orange-800 text-xs p-2 rounded mb-2 flex gap-2 items-start">
+                                        <Icon icon="mdi:history" className="mt-0.5 flex-shrink-0" />
+                                        <div>
+                                            <span className="font-bold">Revisi Sebelumnya:</span>
+                                            <p className="opacity-90">"{item.komentar_verifikasi}"</p>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Action Buttons or Status */}
                                 <div className="mt-auto pt-4">
@@ -195,6 +226,45 @@ export default function BatchVerificationView({ notification, onComplete }) {
                             </div>
                         </div>
 
+                        {/* Anggota Keluarga Section - Added KTP Photos */}
+                        {
+                            item.family_form?.members && item.family_form.members.length > 0 && (
+                                <div className="mt-4 pt-4 border-t border-slate-100">
+                                    <h5 className="font-bold text-slate-700 mb-3 text-sm flex items-center gap-2">
+                                        <Icon icon="mdi:account-group" /> Anggota Keluarga ({item.family_form.members.length})
+                                    </h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {item.family_form.members.map((m, idx) => (
+                                            <div key={idx} className="flex gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                                {/* Member KTP Thumbnail */}
+                                                <div
+                                                    className="w-24 h-24 bg-white rounded border border-slate-200 overflow-hidden cursor-zoom-in flex-shrink-0 relative group"
+                                                    onClick={() => m.foto_ktp && setZoomImage(`${(import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:9000/api`).replace('/api', '')}/storage/${m.foto_ktp}`)}
+                                                >
+                                                    {m.foto_ktp ? (
+                                                        <img
+                                                            src={`${(import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:9000/api`).replace('/api', '')}/storage/${m.foto_ktp}`}
+                                                            alt={m.nama}
+                                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                                            <Icon icon="mdi:image-off" width="16" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-bold text-slate-800 text-sm truncate" title={m.nama}>{m.nama}</p>
+                                                    <p className="text-xs text-slate-500">{m.hubungan} • {m.umur} th</p>
+                                                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">{m.nik}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )
+                        }
+
                         {/* Comment Form */}
                         {rejectId === item.id && (
                             <div className="mt-4 pt-4 border-t border-orange-50">
@@ -228,6 +298,25 @@ export default function BatchVerificationView({ notification, onComplete }) {
                     </div>
                 ))}
             </div>
+
+            {/* ZOOM MODAL */}
+            {
+                zoomImage && (
+                    <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-fade-in cursor-zoom-out" onClick={() => setZoomImage(null)}>
+                        <button className="absolute top-6 right-6 text-white p-3 rounded-full bg-white/10 hover:bg-white/20 transition backdrop-blur-sm">
+                            <Icon icon="mdi:close" width="32" />
+                        </button>
+                        <img
+                            src={zoomImage}
+                            alt="Zoom"
+                            className="max-w-full max-h-[90vh] object-contain rounded shadow-2xl"
+                        />
+                        <div className="absolute bottom-6 text-white/50 text-sm font-medium">
+                            Klik dimana saja untuk menutup
+                        </div>
+                    </div>
+                )
+            }
         </div >
     );
 }

@@ -228,8 +228,8 @@ export default function Relawan() {
   return (
     <div className="space-y-6">
       {/* ================= HEADER ================= */}
-      <div className="bg-white rounded-lg p-7 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <h1 className="text-3xl font-bold text-blue-900">Data Relawan</h1>
+      <div className="bg-white rounded-lg p-7 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4 ">
+        <h1 className="text-3xl font-bold text-blue-900 ">Data Relawan</h1>
         {role !== "admin" && (
           <div className="flex flex-col sm:flex-row gap-3">
             <button onClick={() => setOpenImport(true)} className="bg-blue-500/15 text-blue-800 border border-blue-200/40 px-4 py-2 rounded-lg hover:bg-blue-500/25">
@@ -248,73 +248,89 @@ export default function Relawan() {
           <Icon icon="mdi:filter-variant" className="text-blue-700" width="28" />
           <div>
             <div className="text-lg font-semibold">Filter Data</div>
-            <div className="text-sm text-slate-400">Cari data berdasarkan nama, NIK, TPS, atau wilayah</div>
+            <div className="text-sm text-slate-400">Cari data berdasarkan Nama, NIK, TPS, atau Wilayah</div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
           {/* SEARCH BOX GABUNGAN (Span 12 cols di mobile, 4 cols di desktop) */}
-          <div className="md:col-span-4 relative">
-             <Icon icon="mdi:magnify" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" width="24" />
-             <input
-              className="w-full border border-gray-400 pl-12 pr-5 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="Cari Nama / NIK / TPS"
-              value={filters.keyword}
-              onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
-              onKeyDown={(e) => e.key === 'Enter' && applyFilter()}
-            />
+          <div className="md:col-span-4 relative group">
+              <Icon 
+                  icon="mdi:magnify" 
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" 
+                  width="24" 
+              />
+              <input
+                  className="w-full border border-gray-400 pl-12 pr-5 py-3 rounded-lg outline-none transition-all duration-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-600 placeholder:text-gray-400"
+                  placeholder="Cari Nama / NIK / TPS"
+                  value={filters.keyword}
+                  onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
+                  onKeyDown={(e) => e.key === 'Enter' && applyFilter()}
+              />
           </div>
 
           {/* REGION FILTERS */}
           <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* KOTA */}
-            <div className="relative">
-              <Icon icon="mdi:chevron-down" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="22" />
-              <select
-                className={`w-full appearance-none border border-gray-400 pl-5 pr-12 py-3 rounded-lg ${filters.city_code ? "text-slate-800" : "text-slate-400"}`}
-                value={filters.city_code}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setFilters({ ...filters, city_code: val, district_code: "", village_code: "" });
-                  loadDistricts(val);
-                }}
-              >
-                <option value="">Pilih Kota/Kabupaten</option>
-                {cities.map((c) => (<option key={c.city_code} value={c.city_code}>{c.city}</option>))}
-              </select>
-            </div>
+              {/* KOTA */}
+              <div className="relative group">
+                  <Icon 
+                      icon="mdi:chevron-down" 
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-blue-600 transition-colors" 
+                      width="22" 
+                  />
+                  <select
+                      className={`w-full appearance-none border border-gray-400 pl-5 pr-12 py-3 rounded-lg outline-none transition-all duration-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-600 ${filters.city_code ? "text-slate-800" : "text-slate-400"}`}
+                      value={filters.city_code}
+                      onChange={(e) => {
+                          const val = e.target.value;
+                          setFilters({ ...filters, city_code: val, district_code: "", village_code: "" });
+                          loadDistricts(val);
+                      }}
+                  >
+                      <option value="">Pilih Kota/Kabupaten</option>
+                      {cities.map((c) => (<option key={c.city_code} value={c.city_code}>{c.city}</option>))}
+                  </select>
+              </div>
 
-            {/* KECAMATAN */}
-            <div className="relative">
-              <Icon icon="mdi:chevron-down" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" width="22" />
-              <select
-                className="w-full appearance-none border border-gray-400 pl-5 pr-12 py-3 rounded-lg"
-                value={filters.district_code}
-                disabled={!filters.city_code}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setFilters({ ...filters, district_code: val, village_code: "" });
-                  loadVillages(val);
-                }}
-              >
-                <option value="">Pilih Kecamatan</option>
-                {districts.map((d) => (<option key={d.district_code} value={d.district_code}>{d.district}</option>))}
-              </select>
-            </div>
+              {/* KECAMATAN */}
+              <div className="relative group">
+                  <Icon 
+                      icon="mdi:chevron-down" 
+                      className={`absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${!filters.city_code ? "text-gray-200" : "text-slate-400 group-focus-within:text-blue-600"}`} 
+                      width="22" 
+                  />
+                  <select
+                      className="w-full appearance-none border border-gray-400 pl-5 pr-12 py-3 rounded-lg outline-none transition-all duration-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-600 disabled:bg-gray-50 disabled:text-gray-300 disabled:border-gray-200"
+                      value={filters.district_code}
+                      disabled={!filters.city_code}
+                      onChange={(e) => {
+                          const val = e.target.value;
+                          setFilters({ ...filters, district_code: val, village_code: "" });
+                          loadVillages(val);
+                      }}
+                  >
+                      <option value="">Pilih Kecamatan</option>
+                      {districts.map((d) => (<option key={d.district_code} value={d.district_code}>{d.district}</option>))}
+                  </select>
+              </div>
 
-            {/* KELURAHAN */}
-            <div className="relative">
-              <Icon icon="mdi:chevron-down" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" width="22" />
-              <select
-                className="w-full appearance-none border border-gray-400 pl-5 pr-12 py-3 rounded-lg"
-                value={filters.village_code}
-                disabled={!filters.district_code}
-                onChange={(e) => setFilters({ ...filters, village_code: e.target.value })}
-              >
-                <option value="">Pilih Kelurahan</option>
-                {villages.map((v) => (<option key={v.village_code} value={v.village_code}>{v.village}</option>))}
-              </select>
-            </div>
+              {/* KELURAHAN */}
+              <div className="relative group">
+                  <Icon 
+                      icon="mdi:chevron-down" 
+                      className={`absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${!filters.district_code ? "text-gray-200" : "text-slate-400 group-focus-within:text-blue-600"}`} 
+                      width="22" 
+                  />
+                  <select
+                      className="w-full appearance-none border border-gray-400 pl-5 pr-12 py-3 rounded-lg outline-none transition-all duration-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-600 disabled:bg-gray-50 disabled:text-gray-300 disabled:border-gray-200"
+                      value={filters.village_code}
+                      disabled={!filters.district_code}
+                      onChange={(e) => setFilters({ ...filters, village_code: e.target.value })}
+                  >
+                      <option value="">Pilih Kelurahan</option>
+                      {villages.map((v) => (<option key={v.village_code} value={v.village_code}>{v.village}</option>))}
+                  </select>
+              </div>
           </div>
         </div>
 
@@ -325,14 +341,14 @@ export default function Relawan() {
             <Icon icon="mdi:filter-variant" width={20} />
           </button>
 
-          <button onClick={resetFilter} className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg hover:bg-blue-100 transition border border-blue-200">
+          <button onClick={resetFilter} className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg hover:bg-blue-200 transition border border-blue-200">
             <Icon icon="mdi:refresh" width={20} />
           </button>
 
           <div className="flex-1 md:flex-none" /> {/* Spacer */}
           
-          <button onClick={() => setShowPasswordModal(true)} className="bg-blue-100 text-blue-800 px-6 py-2 rounded-lg hover:bg-green-100 transition border border-green-200 flex items-center gap-4">
-             Export Akun
+          <button onClick={() => setShowPasswordModal(true)} className="bg-blue-100 text-blue-800 px-6 py-2 rounded-lg hover:bg-blue-200 transition border border-green-200 flex items-center gap-4 font-bold">
+            Export Akun
           </button>
         </div>
       </div>
@@ -354,6 +370,19 @@ export default function Relawan() {
         <div className="md:hidden space-y-4 px-4 pb-4">
           {isLoading && <div className="text-center py-6">Loading...</div>}
           {isError && <div className="text-center py-6 text-red-600">Gagal memuat data</div>}
+          {!isLoading && !isError && paginatedData.length === 0 && (
+            <div className="text-center py-10 text-slate-500">
+              <Icon
+                icon="mdi:database-off-outline"
+                width={36}
+                className="mx-auto mb-2"
+              />
+              <p className="font-medium">Data belum tersedia</p>
+              <p className="text-sm opacity-70">
+                Belum ada data relawan yang bisa ditampilkan
+              </p>
+            </div>
+          )}
           {!isLoading && !isError && paginatedData.map((item) => (
             <div key={item.id} className="bg-white border rounded-xl p-4 shadow-sm space-y-3">
               <div className="flex justify-between items-start">
@@ -361,7 +390,7 @@ export default function Relawan() {
                   <h3 className="font-semibold text-gray-900">{item.nama}</h3>
                   <p className="text-sm text-gray-500">{item.nik}</p>
                 </div>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium shrink-0 ml-2 ${item.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                <span className={`px-2 py-1 rounded-full text-xs font-semibold shrink-0 ml-2 ${item.status === "active" ? "bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold  " : "bg-rose-100 text-rose-700 border border-rose-200 font-bold"}`}>
                   {item.status === "active" ? "Aktif" : "Tidak Aktif"}
                 </span>
               </div>
@@ -387,72 +416,147 @@ export default function Relawan() {
                     <Icon icon="solar:trash-bin-trash-outline" width={20} />
                   </button>
                 )}
-                <button onClick={() => navigate(`/relawan/${item.id}`)} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 text-blue-900 rounded-lg font-medium hover:bg-blue-100">
-                  <Icon icon="mdi:eye-outline" width={20} />
-                  <span>Detail</span>
+                <button onClick={() => navigate(`/relawan/${item.id}`)} className="flex-1 bg-blue-100 hover:bg-blue-100 text-blue-700 py-2.5 rounded-lg flex items-center justify-center transition-colors">
+                  <Icon icon="si:eye-line" width={20} />
+                  <span className="ml-2 text-xs font-bold">Detail</span>
                 </button>
               </div>
             </div>
           ))}
         </div>
 
-        {/* VIEW DESKTOP (>= md) */}
-        <table className="w-full text-base hidden md:table">
-          <thead className="bg-slate-100">
-            <tr>
-              <th className="px-5 py-4 text-left">Nama</th>
-              <th className="px-5 py-4 text-left hidden md:table-cell">NIK</th>
-              <th className="px-5 py-4 text-left hidden md:table-cell">Wilayah</th>
-              <th className="px-5 py-4 text-left hidden md:table-cell">No. HP</th>
-              <th className="px-5 py-4 text-left hidden md:table-cell">TPS</th>
-              <th className="px-5 py-4 text-left hidden md:table-cell">Status</th>
-              <th className="px-5 py-4 text-left">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && <tr><td colSpan="7" className="py-6 text-center">Loading...</td></tr>}
-            {isError && <tr><td colSpan="7" className="py-6 text-center text-red-600">Gagal memuat data</td></tr>}
-            {paginatedData.map((item) => (
-              <tr key={item.id} className="border-t hover:bg-slate-50">
-                <td className="px-5 py-4 font-medium">{item.nama}</td>
-                <td className="px-5 py-4 hidden md:table-cell">{item.nik}</td>
-                <td className="px-5 py-4 hidden md:table-cell">{item.village?.village || "-"}</td>
-                <td className="px-5 py-4 hidden md:table-cell">{item.no_hp}</td>
-                <td className="px-5 py-4 hidden md:table-cell">{item.tps}</td>
-                <td className="px-5 py-4 hidden md:table-cell">
-                  <span className={`px-4 py-1.5 rounded-full text-sm ${item.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                    {item.status === "active" ? "Aktif" : "Tidak Aktif"}
-                  </span>
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    {role !== "admin" && (
-                      <button onClick={() => setDeleteTarget(item)} className="w-9 h-9 flex items-center justify-center rounded-lg text-red-600 border border-red-600 hover:bg-red-600 hover:text-white transition">
-                        <Icon icon="solar:trash-bin-trash-outline" width={20} />
-                      </button>
-                    )}
-                    <button onClick={() => navigate(`/relawan/${item.id}`)} className="w-9 h-9 flex items-center justify-center text-blue-900 border border-blue-900 rounded-lg hover:bg-blue-800 hover:text-white transition">
-                      <Icon icon="mdi:eye-outline" width={20} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              {/* ================= DESKTOP TABLE VIEW (>= md) ================= */}
+      <table className="w-full text-base hidden md:table border-separate border-spacing-0">
+        <thead className="bg-slate-100">
+          <tr>
+            <th className="px-5 py-4 text-left font-bold text-slate-700">Nama</th>
+            <th className="px-5 py-4 text-left hidden md:table-cell font-bold text-slate-700">NIK</th>
+            <th className="px-5 py-4 text-left hidden md:table-cell font-bold text-slate-700">Wilayah</th>
+            <th className="px-5 py-4 text-left hidden md:table-cell font-bold text-slate-700">No. HP</th>
+            <th className="px-5 py-4 text-center hidden md:table-cell font-bold text-slate-700">TPS</th> {/* CENTER */}
+            <th className="px-5 py-4 text-center hidden md:table-cell font-bold text-slate-700">Status</th> {/* CENTER */}
+            <th className="px-5 py-4 text-center font-bold text-slate-700">Aksi</th> {/* CENTER */}
+          </tr>
+        </thead>
 
-        {/* PAGINATION CONTROL */}
+        <tbody>
+          {isLoading && (
+            <tr><td colSpan="7" className="py-10 text-center text-slate-500">Loading data...</td></tr>
+          )}
+          
+          {isError && (
+            <tr><td colSpan="7" className="py-10 text-center text-red-600">Gagal memuat data</td></tr>
+          )}
+
+          {!isLoading && !isError && paginatedData.length === 0 && (
+            <tr>
+              <td colSpan="7" className="py-16 text-center text-slate-500">
+                <div className="flex flex-col items-center gap-2 opacity-60">
+                  <Icon icon="mdi:database-off-outline" width={48} />
+                  <p className="font-semibold text-lg">Data belum tersedia</p>
+                  <p className="text-sm">
+                    Belum ada data relawan yang dapat ditampilkan.
+                  </p>
+                </div>
+              </td>
+            </tr>
+          )}
+
+          {!isLoading && paginatedData.map((item) => (
+            <tr 
+              key={item.id} 
+              className="group border-t hover:bg-blue-50/50 transition-all duration-200"
+            >
+              <td className="px-5 py-4 font-medium text-slate-800">{item.nama}</td>
+              <td className="px-5 py-4 hidden md:table-cell text-slate-600">{item.nik}</td>
+              <td className="px-5 py-4 hidden md:table-cell text-slate-600">
+                {item.village?.village || "-"}
+              </td>
+              <td className="px-5 py-4 hidden md:table-cell text-slate-600">{item.no_hp}</td>
+              
+              {/* TPS: Center */}
+              <td className="px-5 py-4 hidden md:table-cell text-center font-semibold text-slate-700">
+                {item.tps}
+              </td>
+
+              {/* STATUS: Center & Glow Style */}
+              <td className="px-5 py-4 hidden md:table-cell text-center">
+                <span className={`inline-flex justify-center items-center min-w-[100px] px-4 py-1.5 rounded-full text-xs font-bold transition-all
+                  ${item.status === "active" 
+                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold " 
+                    : "bg-rose-100 text-rose-700 border border-rose-200 font-bold "
+                  }`}
+                >
+                  {item.status === "active" ? "Aktif" : "Tidak Aktif"}
+                </span>
+              </td>
+
+              {/* AKSI: Center */}
+              <td className="px-5 py-4">
+                <div className="flex items-center justify-center gap-2">
+                  {role !== "admin" && (
+                    <button 
+                      onClick={() => setDeleteTarget(item)} 
+                      title="Hapus"
+                      className="w-9 h-9 flex items-center justify-center rounded-lg text-red-600 border border-red-400 bg-white hover:bg-red-600 hover:text-white hover:border-red-600 transition-all shadow-sm hover:shadow-red-500/30"
+                    >
+                      <Icon icon="solar:trash-bin-trash-outline" width={18} />
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => navigate(`/relawan/${item.id}`)} 
+                    title="Lihat Detail"
+                    className="w-9 h-9 flex items-center justify-center text-blue-600 border border-blue-400 bg-white rounded-lg hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm hover:shadow-blue-500/30"
+                  >
+                    <Icon icon="si:eye-line" width={18} />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {!isLoading && !isError && paginatedData.length > 0 && (
         <div className="flex justify-between items-center px-6 py-4">
-          <div className="text-sm text-slate-500">Halaman {page} dari {totalPage}</div>
-            <div className="flex items-center gap-2">
-              <button disabled={page === 1} onClick={() => setPage(page - 1)} className="px-3 py-1 border rounded-lg disabled:opacity-50">Prev</button>
-                {pages.map((p) => (
-              <button key={p} onClick={() => setPage(p)} className={`px-3 py-1 rounded-lg border ${p === page ? "bg-blue-900 text-white border-blue-900" : "hover:bg-slate-100"}`}>{p}</button>
-                ))}
-              <button disabled={page === totalPage} onClick={() => setPage(page + 1)} className="px-3 py-1 border rounded-lg disabled:opacity-50">Next</button>
-            </div>
+          <div className="text-sm text-slate-500">
+            Halaman {page} dari {totalPage}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              disabled={page === 1}
+              onClick={() => setPage(page - 1)}
+              className="px-3 py-1 border rounded-lg disabled:opacity-50"
+            >
+              Sebelumnya
+            </button>
+
+            {pages.map((p) => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={`px-3 py-1 rounded-lg border ${
+                  p === page
+                    ? "bg-blue-900 text-white border-blue-900"
+                    : "hover:bg-slate-100"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+
+            <button
+              disabled={page === totalPage}
+              onClick={() => setPage(page + 1)}
+              className="px-3 py-1 border rounded-lg disabled:opacity-50"
+            >
+              Selanjutnya
+            </button>
           </div>
         </div>
+      )}
+      </div>
 
       {/* ================= MODALS ================= */}
       {/* Modal Delete */}
@@ -512,34 +616,75 @@ export default function Relawan() {
           <div className="relative bg-white w-full max-w-md rounded-2xl p-6 z-10 shadow-2xl">
             <h2 className="text-xl font-semibold text-slate-800 mb-5">Konfirmasi Password</h2>
 
-          {/* ===== FAKE EMAIL (ANTI AUTOFILL) ===== */}
-              <input
-                type="email"
-                name="email"
-                autoComplete="email"
-                tabIndex={-1}
-                className="absolute -left-[9999px] opacity-0 pointer-events-none"
-              />
+            {/* ===== FAKE EMAIL (ANTI AUTOFILL) ===== */}
+            <input
+              type="email"
+              name="email"
+              autoComplete="email"
+              tabIndex={-1}
+              className="absolute -left-[9999px] opacity-0 pointer-events-none"
+            />
 
-              {/* ===== FAKE PASSWORD (PAIR EMAIL) ===== */}
-              <input
-                type="password"
-                name="password"
-                autoComplete="current-password"
-                tabIndex={-1}
-                className="absolute -left-[9999px] opacity-0 pointer-events-none"
-              />
+            {/* ===== FAKE PASSWORD (PAIR EMAIL) ===== */}
+            <input
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              tabIndex={-1}
+              className="absolute -left-[9999px] opacity-0 pointer-events-none"
+            />
 
-              
-
-            
+            {/* ===== PASSWORD ASLI ===== */}
             <div className="relative mb-6">
-              <input type={showExportPassword ? "text" : "password"} className="w-full border rounded-xl pl-12 pr-12 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Password akun" value={exportPassword} onChange={(e) => setExportPassword(e.target.value)} />
-              <button type="button" onClick={() => setShowExportPassword(!showExportPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"><Icon icon={showExportPassword ? "mdi:eye-off-outline" : "mdi:eye-outline"} width={22} /></button>
+              {/* ICON LOCK */}
+              <Icon
+                icon="mdi:lock-outline"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                width={22}
+              />
+
+              <input
+                type={showExportPassword ? "text" : "password"}
+                value={exportPassword}
+                onChange={(e) => setExportPassword(e.target.value)}
+                autoComplete="new-password"
+                placeholder="Password akun"
+                className="w-full border rounded-xl pl-12 pr-12 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
+              {/* SHOW / HIDE */}
+              <button
+                type="button"
+                onClick={() => setShowExportPassword(!showExportPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
+              >
+                <Icon
+                  icon={showExportPassword ? "mdi:eye-off-outline" : "mdi:eye-outline"}
+                  width="22"
+                />
+              </button>
             </div>
-            <div className="flex justify-end gap-3">
-              <button onClick={closeExportModal} disabled={exporting} className="px-4 py-2 rounded-lg border text-slate-600 hover:bg-slate-100 disabled:opacity-50">Batal</button>
-              <button onClick={handleConfirmExport} disabled={!exportPassword || exporting} className="px-5 py-2 rounded-lg bg-blue-900 text-white hover:bg-blue-800 disabled:opacity-50">{exporting ? "Memproses..." : "Konfirmasi"}</button>
+
+            {/* ACTION BUTTONS */}
+            <div className="flex flex-col sm:flex-row justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeExportModal}
+                disabled={exporting}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg border text-slate-600 hover:bg-slate-100 transition disabled:opacity-50"
+              >
+                Batal
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmExport}
+                disabled={!exportPassword || exporting}
+                className={`w-full sm:w-auto px-5 py-2 rounded-lg bg-blue-900 text-white hover:bg-blue-800 transition 
+                  ${exporting || !exportPassword ? "opacity-50 cursor-not-allowed" : ""}`}
+              >
+                {exporting ? "Memproses..." : "Konfirmasi"}
+              </button>
             </div>
           </div>
         </div>,

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../../../lib/axios";
+import { Icon } from "@iconify/react";
 import MapAnalisis from "./mapAnalisis";
 
 /* =========================
@@ -49,11 +50,19 @@ export default function AnalisisPaslonIndex() {
   const [selectedPaslon, setSelectedPaslon] = useState(null);
 
   useEffect(() => {
-    api.get("/analisis/straight-ticket/district").then((res) => {
-      setData(res.data || []);
-      setLoading(false);
-    });
+    api.get("/analisis/straight-ticket/district")
+      .then((res) => {
+        setData(res.data || []);
+      })
+      .catch((err) => {
+        console.error("Analisis error:", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
+
+
 
   /* =========================
      SUMMARY ATAS
@@ -94,7 +103,24 @@ export default function AnalisisPaslonIndex() {
     return base;
   }, [data]);
 
-  if (loading) return <div className="p-4">Loading...</div>;
+  if (loading) return (
+    <div className="fixed inset-0 bg-slate-100 z-50 flex items-center justify-center">
+      <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-blue-200 rounded-full animate-spin border-t-blue-900"></div>
+          <Icon
+            icon="mdi:account-details"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-900"
+            width="28"
+          />
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-semibold text-slate-800">Memuat Data</p>
+          <p className="text-sm text-slate-500">Mohon tunggu sebentar...</p>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="p-4 space-y-4">

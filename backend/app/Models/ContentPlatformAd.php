@@ -12,7 +12,8 @@ class ContentPlatformAd extends Model
     protected $table = 'content_platform_ads';
 
     protected $fillable = [
-        'content_platform_id',
+        'content_plan_id',
+        'platform_id',
         'is_ads',
         'start_date',
         'end_date',
@@ -26,8 +27,13 @@ class ContentPlatformAd extends Model
         'budget_ads' => 'decimal:2',
     ];
 
-    public function contentPlatform()
+    public function contentPlan()
     {
-        return $this->belongsTo(ContentPlatform::class);
+        return $this->belongsTo(ContentPlan::class);
+    }
+
+    public function platform()
+    {
+        return $this->belongsTo(Platform::class);
     }
 }

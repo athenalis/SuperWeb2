@@ -20,7 +20,6 @@ use App\Http\Controllers\Api\PetaSuaraController;
 use App\Http\Controllers\Api\EngagementController;
 use App\Http\Controllers\Api\InfluencerController;
 use App\Http\Controllers\Api\PetaPartaiController;
-use App\Http\Controllers\Api\TicketVoteController;
 use App\Http\Controllers\Api\ContentPlanController;
 use App\Http\Controllers\Api\ContentTypeController;
 use App\Http\Controllers\Api\CoordinatorController;
@@ -29,21 +28,61 @@ use App\Http\Controllers\Api\ContentPlatformController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\MapVisitController;
 
+// auth
 Route::post('/login', [AuthController::class, 'login'])->name('login');
 Route::middleware('auth:sanctum')->get('/me', function (Request $request) {
     return $request->user();
 });
-
+Route::middleware('auth:sanctum')->post('/logout', [AuthController::class, 'logout']);
 Route::middleware(['auth:sanctum', 'role:koordinator'])->get('/me/wilayah', [AuthController::class, 'wilayah']);
 
-Route::prefix('wilayah')->group(function () {
-    Route::get('/', [WilayahController::class, 'index']);
-    Route::get('cities/{province}', [WilayahController::class, 'cities']);
-    Route::get('districts/{city}', [WilayahController::class, 'districts']);
-    Route::get('villages/{district}', [WilayahController::class, 'villages']);
-    Route::get('pekerjaan', [WilayahController::class, 'pekerjaan']);
+// public
+Route::middleware('auth:sanctum')->group(function () {
+
+    // Ormas
+    Route::get('/ormas', [OrmasController::class, 'index']);
+
+    // Wilayah
+    Route::prefix('wilayah')->group(function () {
+        Route::get('/', [WilayahController::class, 'index']);
+        Route::get('cities/{province}', [WilayahController::class, 'cities']);
+        Route::get('districts/{city}', [WilayahController::class, 'districts']);
+        Route::get('villages/{district}', [WilayahController::class, 'villages']);
+        Route::get('pekerjaan', [WilayahController::class, 'pekerjaan']);
+    });
+
+    // Template download
+    Route::get('/koordinator/template', function () {
+        return Excel::download(new KoordinatorTemplate, 'template_koordinator.xlsx');
+    });
+
+    Route::get('/relawan/template', function () {
+        return Excel::download(new RelawanTemplate, 'template_relawan.xlsx');
+    });
+
+    // Notifications
+    Route::prefix('notifications')->group(function () {
+        Route::get('/', [NotificationController::class, 'index']);
+        Route::post('/read-all', [NotificationController::class, 'markAllAsRead']);
+        Route::post('/{id}/read', [NotificationController::class, 'markAsRead']);
+        Route::delete('/{id}', [NotificationController::class, 'destroy']);
+    });
+
+    // Relawan
+    Route::prefix('relawan')->group(function () {
+        Route::post('/export-all', [RelawanController::class, 'export']);
+        Route::get('/', [RelawanController::class, 'index']);
+        Route::get('/{id}', [RelawanController::class, 'show']);
+    });
 });
 
+// kunjungan - relawan and koor
+Route::middleware(['auth:sanctum', 'role:relawan|koordinator'])->prefix('kunjungan')->group(function () {
+    Route::get('/', [KunjunganController::class, 'index']);
+    Route::get('/{id}', [KunjunganController::class, 'show']);
+});
+
+// kunjungan - relawan only
 Route::middleware(['auth:sanctum', 'role:relawan'])->prefix('kunjungan')->group(function () {
     Route::post('/', [KunjunganController::class, 'store']);
     Route::put('/{id}', [KunjunganController::class, 'update']);
@@ -53,42 +92,18 @@ Route::middleware(['auth:sanctum', 'role:relawan'])->prefix('kunjungan')->group(
     Route::delete('/anggota/{anggota_id}', [KunjunganController::class, 'hapusAnggota']);
     Route::post('/{kunjungan_id}/selesai', [KunjunganController::class, 'selesaikanKunjungan']);
     Route::post('/ocr-ktp', [KunjunganController::class, 'ocrKtp']);
+    Route::get('/summary-kunjungan', [KunjunganController::class, 'index']);
+    Route::post('/check-nik', [KunjunganController::class, 'checkNik']);
 });
 
-Route::middleware(['auth:sanctum', 'role:relawan|koordinator'])->prefix('kunjungan')->group(function () {
-    Route::get('/', [KunjunganController::class, 'index']);
-    Route::get('/{id}', [KunjunganController::class, 'show']);
-});
-
+// kunjungan - koor only
 Route::middleware(['auth:sanctum', 'role:koordinator'])->prefix('kunjungan')->group(function () {
     Route::get('/batch/next', [KunjunganController::class, 'getNextBatch']);
     Route::post('/{id}/verifikasi', [KunjunganController::class, 'verifikasi']);
 });
 
-// Message routes - Disabled requested by user
-// Route::middleware(['auth:sanctum'])->prefix('kunjungan')->group(function () {
-//     Route::get('/{id}/messages', [\App\Http\Controllers\Api\VisitMessageController::class, 'index']);
-//     Route::post('/{id}/messages', [\App\Http\Controllers\Api\VisitMessageController::class, 'store']);
-// });
-
-Route::get('/koordinator/template', function () {
-    return Excel::download(
-        new KoordinatorTemplate,
-        'template_koordinator.xlsx'
-    );
-});
-
-Route::get('/relawan/template', function () {
-    return Excel::download(
-        new RelawanTemplate,
-        'template_relawan.xlsx'
-    );
-});
-
-Route::get('/ormas', [OrmasController::class, 'index']);
-
 Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-    // Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
+    // koor
     Route::prefix('koordinator')->name('koordinator.')->group(function () {
         Route::post('/export', [CoordinatorController::class, 'exportAll']);
         Route::get('/', [CoordinatorController::class, 'index']);
@@ -101,14 +116,15 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::post('/check-nik', [CoordinatorController::class, 'checkNik']);
         Route::post('/restore', [CoordinatorController::class, 'restoreByNik']);
     });
-    Route::middleware(['auth:sanctum', 'role:relawan'])->prefix('kunjungan')->group(function () {
-        Route::get('/summary-kunjungan', [KunjunganController::class, 'index']);
-    });
+
+    // suara
     Route::prefix('suara')->group(function () {
         Route::get('/paslon', [SuaraController::class, 'paslonCard']);
         Route::get('/diagram-paslon', [SuaraController::class, 'diagramPaslon']);
         Route::get('/diagram-partai', [SuaraController::class, 'diagramPartai']);
     });
+
+    // peta
     Route::prefix('peta')->group(function () {
         Route::prefix('paslon')->group(function () {
             Route::get('/kota', [PetaSuaraController::class, 'perKota']);
@@ -128,13 +144,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::get('/visit', [MapVisitController::class, 'mapData']);
     });
 
-    Route::prefix('analisis')->group(function () {
-        Route::get('/straight-ticket/district', [Analisis::class, 'straightTicketByDistrict']);
-    });
-    
-    Route::get('/activity-logs', [HistoryController::class, 'index']);
-    Route::get('/straight/jakarta-utara', [TicketVoteController::class, 'jakartaUtaraPerKecamatan']);
-
+    // social media (content)
     Route::prefix('content-plans')->group(function () {
         Route::get('/', [ContentPlanController::class, 'index']);
         Route::get('/{id}', [ContentPlanController::class, 'show']);
@@ -147,14 +157,20 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::put('/{id}/analytics/record/{engagementId}', [EngagementController::class, 'update']);
     });
 
-    Route::get('/budget', [BudgetController::class, 'index']);
-    Route::get('/platforms', [ContentPlatformController::class, 'index']);
-    Route::get('/content-types', [ContentTypeController::class, 'index']);
-    Route::get('/influencers', [InfluencerController::class, 'index']);
+    Route::prefix('analisis')->group(function () {
+        Route::get('/straight-ticket/district', [Analisis::class, 'straightTicketByDistrict']);
+    });
     Route::get('/content-statuses', function () {
         return ContentStatus::select('id', 'label')->get();
     });
     Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/activity-logs', [HistoryController::class, 'index']);
+    Route::get('/budget', [BudgetController::class, 'index']);
+    Route::get('/platforms', [ContentPlatformController::class, 'index']);
+    Route::get('/content-types', [ContentTypeController::class, 'index']);
+    Route::get('/influencers', [InfluencerController::class, 'index']);
+    Route::post('/influencers', [InfluencerController::class, 'store']);
+    Route::put('/influencers/{id}', [InfluencerController::class, 'update']);
 });
 
 Route::middleware(['auth:sanctum', 'role:koordinator'])->group(function () {
@@ -165,20 +181,5 @@ Route::middleware(['auth:sanctum', 'role:koordinator'])->group(function () {
         Route::delete('/{id}', [RelawanController::class, 'destroy']);
         Route::post('/check-nik', [RelawanController::class, 'checkNik']);
         Route::post('/restore', [RelawanController::class, 'restoreByNik']);
-    });
-});
-
-Route::middleware(['auth:sanctum'])->group(function () {
-    Route::prefix('notifications')->group(function () {
-        Route::get('/', [NotificationController::class, 'index']);
-        Route::post('/read-all', [NotificationController::class, 'markAllAsRead']);
-        Route::post('/{id}/read', [NotificationController::class, 'markAsRead']);
-        Route::delete('/{id}', [NotificationController::class, 'destroy']);
-    });
-
-    Route::prefix('relawan')->group(function () {
-        Route::post('/export-all', [RelawanController::class, 'export']);
-        Route::get('/', [RelawanController::class, 'index']);
-        Route::get('/{id}', [RelawanController::class, 'show']);
     });
 });

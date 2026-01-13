@@ -76,31 +76,48 @@ export default function KoordinatorDetail() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <p className="text-center py-10">Loading...</p>;
+  if (loading) return (
+    <div className="fixed inset-0 bg-slate-100 z-50 flex items-center justify-center">
+      <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-blue-200 rounded-full animate-spin border-t-blue-900"></div>
+          <Icon
+            icon="mdi:account-details"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-900"
+            width="28"
+          />
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-semibold text-slate-800">Memuat Data</p>
+          <p className="text-sm text-slate-500">Mohon tunggu sebentar...</p>
+        </div>
+      </div>
+    </div>
+  );
   if (!data) return <p className="text-center py-10">Data tidak ditemukan</p>;
 
   return (
     <div className="flex justify-center">
       <div className="w-full max-w-8xl bg-white rounded-xl shadow p-8 space-y-10">
 
-      <div className="relative pt-4">
-        {/* TITLE – CENTER BENERAN */}
-        <h1 className="text-3xl font-bold text-center text-blue-900">
-          Detail Koordinator
-        </h1>
+        <div className="relative pt-4">
+          {/* TITLE – CENTER BENERAN */}
+          <h1 className="text-3xl font-bold text-center text-blue-900">
+            Detail Koordinator
+          </h1>
 
-        {/* EDIT BUTTON – TETAP KANAN */}
-        <button
-          onClick={() => navigate(`/koordinator/${id}/edit`)}
-          title="Edit"
-          className="absolute right-0 top-1/2 -translate-y-1/2
+          {/* EDIT BUTTON – TETAP KANAN */}
+          <button
+            onClick={() => navigate(`/koordinator/${id}/edit`)}
+            title="Edit"
+            className="absolute right-0 top-1/2 -translate-y-1/2
                     w-11 h-11 flex items-center justify-center
                     rounded-lg border border-blue-900 text-blue-900
                     hover:bg-blue-900 hover:text-white transition"
-        >
-          <Icon icon="solar:pen-outline" width={20} />
-        </button>
-      </div>
+          >
+            <Icon icon="solar:pen-outline" width={20} />
+          </button>
+        </div>
 
         {/* INFORMASI */}
         <Section title="Informasi Koordinator">

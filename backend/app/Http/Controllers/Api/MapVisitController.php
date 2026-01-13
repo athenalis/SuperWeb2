@@ -5,23 +5,31 @@ namespace App\Http\Controllers\Api;
 use App\Models\VisitForm;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\DB;
 
 class MapVisitController extends Controller
 {
     public function mapData(Request $request)
     {
-        $visits = VisitForm::select(
-            'id',
-            'latitude',
-            'longitude',
-            'nama',
-            'alamat',
-            'status'
-        )
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
-            ->where('latitude', '!=', '')
-            ->where('longitude', '!=', '')
+        $statusVerifikasi = $request->status_verifikasi; // optional
+
+        $visits = VisitForm::query()
+            ->join('relawans', 'relawans.id', '=', 'kunjungan_forms.relawan_id')
+            ->join('villages', 'villages.village_code', '=', 'relawans.village_code')
+            ->when($statusVerifikasi, function ($q) use ($statusVerifikasi) {
+                $q->where('kunjungan_forms.status_verifikasi', $statusVerifikasi);
+            })
+            ->select(
+                'relawans.village_code',
+                'villages.village as village_name',
+
+                DB::raw('COUNT(kunjungan_forms.id) as total_kunjungan'),
+
+                DB::raw("SUM(CASE WHEN kunjungan_forms.status_verifikasi = 'accepted' THEN 1 ELSE 0 END) as completed"),
+                DB::raw("SUM(CASE WHEN kunjungan_forms.status_verifikasi = 'pending' THEN 1 ELSE 0 END) as pending"),
+                DB::raw("SUM(CASE WHEN kunjungan_forms.status_verifikasi = 'rejected' THEN 1 ELSE 0 END) as rejected")
+            )
+            ->groupBy('relawans.village_code', 'villages.village')
             ->get();
 
         return response()->json([

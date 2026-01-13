@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import api from "../../lib/axios";
@@ -7,13 +8,16 @@ import CameraCapture from "../../components/CameraCapture";
 import { validateKTP } from "../../lib/ktpValidator";
 import { offlineDb } from "../../lib/offlineDb";
 
+
 const generateOfflineId = () => `off_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 const maxDate17 = () => {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 17);
-  return d.toISOString().split("T")[0];
+  return d.toISOString().split('T')[0];
 };
+
+
 
 export default function CreateKunjungan() {
   const navigate = useNavigate();
@@ -31,7 +35,13 @@ export default function CreateKunjungan() {
   }, []);
 
   const handleBackClick = () => {
-    setShowExitModal(true);
+    // Clear all drafts to ensure fresh start next time
+    localStorage.removeItem("kunjungan_draft_v1");
+    localStorage.removeItem("kunjungan_draft_step1");
+    localStorage.removeItem("kunjungan_draft_members");
+
+    // Navigate back immediately without confirmation
+    navigate('/kunjungan');
   };
 
   const handleConfirmExit = async () => {
@@ -49,9 +59,9 @@ export default function CreateKunjungan() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-4 md:py-8 px-2 md:px-4">
-      <div className="max-w-8xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+    <div className="min-h-screen bg-white md:bg-gray-50 md:py-8 md:px-4">
+      <div className="w-full md:max-w-5xl md:mx-auto h-full">
+        <div className="bg-white w-full min-h-[100dvh] md:min-h-0 md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col">
           {/* Header with Back Button */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-4 md:px-8 md:py-6 flex items-center gap-4">
             <button
@@ -70,7 +80,7 @@ export default function CreateKunjungan() {
             <Stepper step={step} isMobile={isMobile} />
           </div>
 
-          <div className="p-5 md:p-8">
+          <div className="p-4 md:p-6">
             {isMobile ? (
               // --- MOBILE FLOW (2 STEPS -> 3) ---
               <>
@@ -336,12 +346,16 @@ const Step1 = forwardRef(({ onNext }, ref) => {
     setGpsStatus("Mencari lokasi...");
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const { latitude, longitude } = pos.coords;
         setForm(prev => ({ ...prev, latitude, longitude }));
-        reverseGeocode(latitude, longitude);
+        try {
+          await reverseGeocode(latitude, longitude);
+          setGpsStatus("✓ Lokasi & Alamat terbaca");
+        } catch (e) {
+          setGpsStatus("✓ Lokasi terbaca");
+        }
         setLoadingGps(false);
-        setGpsStatus("✓ Lokasi terbaca");
       },
       (err) => {
         console.error("GPS Error:", err);
@@ -352,10 +366,11 @@ const Step1 = forwardRef(({ onNext }, ref) => {
           setGpsStatus("");
           setError(""); // Ensure red alert is gone
         } else {
+          toast.error("Gagal mengambil GPS: " + err.message);
           setError("Gagal mengambil lokasi. Pastikan GPS aktif.");
         }
       },
-      { enableHighAccuracy: false, timeout: 7000, maximumAge: 0 }
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
     );
   };
 
@@ -525,6 +540,52 @@ const Step1 = forwardRef(({ onNext }, ref) => {
     return null;
   };
 
+
+
+  // DEBOUNCE NIK CHECK
+  const checkNikTimer = useRef(null);
+  const [nikError, setNikError] = useState(null);
+  const [isNikChecking, setIsNikChecking] = useState(false);
+
+  const checkNikAvailability = async (nikValue) => {
+    if (!nikValue || nikValue.length < 16) {
+      setNikError(null);
+      return;
+    }
+
+    setIsNikChecking(true);
+    try {
+      // Gunakan endpoint baru yang ringan
+      const res = await api.post('/kunjungan/check-nik', { nik: nikValue });
+      if (res.data.available === false) {
+        setNikError(res.data.message);
+      } else {
+        setNikError(null);
+      }
+    } catch (err) {
+      // Silent fail if offline or error
+      console.log("Check NIK skipped");
+    } finally {
+      setIsNikChecking(false);
+    }
+  };
+
+  const handleNikChange = (v) => {
+    if (/^\d{0,16}$/.test(v)) {
+      setForm({ ...form, nik: v });
+
+      if (checkNikTimer.current) clearTimeout(checkNikTimer.current);
+
+      if (v.length === 16) {
+        checkNikTimer.current = setTimeout(() => {
+          checkNikAvailability(v);
+        }, 800); // 800ms debounce (ringan buat HP kentang)
+      } else {
+        setNikError(null);
+      }
+    }
+  };
+
   const isValid = !getValidationError();
 
   return (
@@ -534,16 +595,33 @@ const Step1 = forwardRef(({ onNext }, ref) => {
       {error && <Alert type="error" message={error} />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        <Input label="Nama Lengkap" value={form.nama} onChange={(v) => setForm({ ...form, nama: v })} required />
-        <Input label="NIK (16 digit)" value={form.nik} onChange={(v) => /^\d{0,16}$/.test(v) && setForm({ ...form, nik: v })}
-          maxLength={16} placeholder="3201234567891234" required />
+        <Input
+          label="Nama Lengkap"
+          value={form.nama}
+          onChange={(v) => {
+            const clean = v.replace(/[^a-zA-Z\s\.\`\']/g, '');
+            setForm({ ...form, nama: clean });
+          }}
+          required
+        />
+        <Input
+          label="NIK (16 digit)"
+          value={form.nik}
+          onChange={handleNikChange}
+          maxLength={16}
+          placeholder="3201234567891234"
+          required
+          readOnly={false}
+        />
+        {isNikChecking && <p className="text-xs text-blue-500 animate-pulse mt-1">Mengecek ketersediaan NIK...</p>}
+        {nikError && <p className="text-xs text-red-500 font-bold mt-1">⚠️ {nikError}</p>}
         <Input
           type="date"
           label="Tanggal Lahir"
           value={form.tanggal}
-          max={maxDate17()}
           onChange={(v) => setForm({ ...form, tanggal: v })}
           required
+          max={maxDate17()}
         />
         <Select label="Pendidikan" value={form.pendidikan} onChange={(v) => setForm({ ...form, pendidikan: v })}
           options={["SD", "SMP", "SMA/SMK", "D3", "S1", "S2+"]} required />
@@ -1027,6 +1105,48 @@ const StepMobileBiodata = forwardRef(({ onNext }, ref) => {
     fetchPekerjaan();
   }, []);
 
+  // DEBOUNCE NIK CHECK (MOBILE)
+  const checkNikTimer = useRef(null);
+  const [nikError, setNikError] = useState(null);
+  const [isNikChecking, setIsNikChecking] = useState(false);
+
+  const checkNikAvailability = async (nikValue) => {
+    if (!nikValue || nikValue.length < 16) {
+      setNikError(null);
+      return;
+    }
+
+    setIsNikChecking(true);
+    try {
+      const res = await api.post('/kunjungan/check-nik', { nik: nikValue });
+      if (res.data.available === false) {
+        setNikError(res.data.message);
+      } else {
+        setNikError(null);
+      }
+    } catch (err) {
+      console.log("Check NIK skipped");
+    } finally {
+      setIsNikChecking(false);
+    }
+  };
+
+  const handleNikChange = (v) => {
+    if (/^\d{0,16}$/.test(v)) {
+      setForm({ ...form, nik: v });
+
+      if (checkNikTimer.current) clearTimeout(checkNikTimer.current);
+
+      if (v.length === 16) {
+        checkNikTimer.current = setTimeout(() => {
+          checkNikAvailability(v);
+        }, 800);
+      } else {
+        setNikError(null);
+      }
+    }
+  };
+
   // --- AUTO SAVE (FIXED RACE CONDITION) ---
   const DRAFT_KEY = "kunjungan_draft_v1";
 
@@ -1103,12 +1223,12 @@ const StepMobileBiodata = forwardRef(({ onNext }, ref) => {
   const handleRefreshGps = () => { setShowPermissionModal(false); getLocationAndAddress(); };
 
   // Auto-detect location on mount if address is empty
-  // Auto-detect location on mount if address is empty
-  // useEffect(() => {
-  //   if (!form.alamat && !form.latitude) {
-  //     getLocationAndAddress();
-  //   }
-  // }, []);
+  useEffect(() => {
+    if (!form.alamat && !form.latitude) {
+      getLocationAndAddress();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- HANDLERS KEPALA KELUARGA ---
   const handleFotoChange = async (e) => {
@@ -1394,9 +1514,25 @@ const StepMobileBiodata = forwardRef(({ onNext }, ref) => {
           </div>
         </div>
         <div className="space-y-4">
-          <Input label="Nama Lengkap" value={form.nama} onChange={(v) => setForm({ ...form, nama: v })} required />
-          <Input label="NIK (16 digit)" value={form.nik} onChange={(v) => /^\d{0,16}$/.test(v) && setForm({ ...form, nik: v })} maxLength={16} required />
-          <Input type="date" label="Tanggal Lahir" value={form.tanggal} max={maxDate17()} onChange={(v) => setForm({ ...form, tanggal: v })} required />
+          <Input
+            label="Nama Lengkap"
+            value={form.nama}
+            onChange={(v) => {
+              const clean = v.replace(/[^a-zA-Z\s\.\`\']/g, '');
+              setForm({ ...form, nama: clean });
+            }}
+            required
+          />
+          <Input
+            label="NIK (16 digit)"
+            value={form.nik}
+            onChange={handleNikChange}
+            maxLength={16}
+            required
+          />
+          {isNikChecking && <p className="text-xs text-blue-500 animate-pulse mt-1">Mengecek ketersediaan NIK...</p>}
+          {nikError && <p className="text-xs text-red-500 font-bold mt-1">⚠️ {nikError}</p>}
+          <Input type="date" label="Tanggal Lahir" value={form.tanggal} onChange={(v) => setForm({ ...form, tanggal: v })} required max={maxDate17()} />
           <div className="grid grid-cols-2 gap-3">
             <Select label="Pendidikan" value={form.pendidikan} onChange={(v) => setForm({ ...form, pendidikan: v })} options={["SD", "SMP", "SMA/SMK", "D3", "S1", "S2+"]} required />
             <Select label="Pekerjaan" value={form.pekerjaan} onChange={(v) => setForm({ ...form, pekerjaan: v })} options={pekerjaanList} required />
@@ -1483,12 +1619,21 @@ const StepMobileBiodata = forwardRef(({ onNext }, ref) => {
 
                 {/* Card Body - No transitions */}
                 <div className="p-4 space-y-4">
-                  <Input label="Nama Lengkap" value={member.nama} onChange={(v) => updateMember(member.id, "nama", v)} required placeholder="Sesuai KTP" />
+                  <Input
+                    label="Nama Lengkap"
+                    value={member.nama}
+                    onChange={(v) => {
+                      const clean = v.replace(/[^a-zA-Z\s\.\`\']/g, '');
+                      updateMember(member.id, "nama", clean);
+                    }}
+                    required
+                    placeholder="Sesuai KTP"
+                  />
                   <Input label="NIK" value={member.nik} onChange={(v) => /^\d{0,16}$/.test(v) && updateMember(member.id, "nik", v)} maxLength={16} required placeholder="16 Digit Angka" />
 
                   <div className="grid grid-cols-2 gap-3">
                     <Select label="Hubungan" value={member.hubungan} onChange={(v) => updateMember(member.id, "hubungan", v)} options={["Istri", "Suami", "Anak", "Orang Tua", "Mertua", "Famili Lain"]} required />
-                    <Input type="date" label="Tgl Lahir" value={member.tanggalLahir} max={maxDate17()} onChange={(v) => updateMember(member.id, "tanggalLahir", v)} required />
+                    <Input type="date" label="Tgl Lahir" value={member.tanggalLahir} onChange={(v) => updateMember(member.id, "tanggalLahir", v)} required max={maxDate17()} />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -1772,16 +1917,58 @@ function Step3({ kunjunganId, onBack, onComplete }) {
 
 function StepComplete({ onFinish }) {
   return (
-    <div className="text-center py-12">
+    <div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center px-4 text-center">
       <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
         <Icon icon="mdi:check-circle" className="text-green-600" width="64" height="64" />
       </div>
       <h3 className="text-3xl font-bold text-gray-800 mb-3">Kunjungan Berhasil!</h3>
       <p className="text-gray-600 mb-8">Data kunjungan keluarga telah tersimpan dengan baik</p>
-      <Button onClick={() => {
-        if (onFinish) onFinish();
-        window.location.reload();
-      }}>Buat Kunjungan Baru</Button>
+      <div className="hidden md:flex flex-col gap-3 mt-4">
+        <Button onClick={() => {
+          if (onFinish) onFinish();
+          window.location.reload();
+        }}>Buat Kunjungan Baru</Button>
+
+        <button
+          onClick={() => {
+            if (onFinish) onFinish();
+            window.location.href = '/kunjungan';
+          }}
+          className="text-slate-500 font-bold hover:text-blue-600 transition-colors"
+        >
+          Kembali ke Daftar
+        </button>
+      </div>
+
+      {/* MOBILE FIXED BUTTON */}
+      {createPortal(
+        <div
+          style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999, width: '100%' }}
+          className="md:hidden bg-white/90 backdrop-blur-md border-t border-slate-200 p-4 pb-6 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex flex-col gap-3"
+        >
+          <button
+            onClick={() => {
+              if (onFinish) onFinish();
+              window.location.reload();
+            }}
+            className="pointer-events-auto bg-blue-600 text-white w-full py-3.5 rounded-xl shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2.5 font-bold text-base active:scale-[0.98] transition-all"
+          >
+            <Icon icon="mdi:plus-circle" width="24" />
+            BUAT KUNJUNGAN BARU
+          </button>
+
+          <button
+            onClick={() => {
+              if (onFinish) onFinish();
+              window.location.href = '/kunjungan';
+            }}
+            className="w-full py-3 text-slate-500 font-bold active:text-blue-600"
+          >
+            Kembali ke Daftar Kunjungan
+          </button>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -1895,7 +2082,7 @@ function PermissionModal({ onRetry, loading }) {
               ) : (
                 <>
                   <Icon icon="mdi:crosshairs-gps" className="text-xl" />
-                  Coba Lagi / Izinkan
+                  Nyalakan / Izinkan Lokasi
                 </>
               )}
             </button>

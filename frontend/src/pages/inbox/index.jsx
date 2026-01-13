@@ -38,18 +38,29 @@ const AlertModal = ({ isOpen, onClose, message, title = "Alert" }) => {
 export default function InboxIndex() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
-  // Filter out deleted notifications for the list, they will be shown as popups
-  const listNotifications = notifications.filter(n => n.data?.type !== 'visit_deleted' || n.read_at);
-  const deletedNotifications = notifications.filter(n => n.data?.type === 'visit_deleted' && !n.read_at);
-
   const [loading, setLoading] = useState(true);
   const [selectedNotification, setSelectedNotification] = useState(null);
+  const [pendingVerifications, setPendingVerifications] = useState([]); // New state for reminder
 
   // Get role from localStorage - same way as Navbar
   const role = localStorage.getItem("role") || "";
 
+  // Filter out deleted notifications for the list, they will be shown as popups
+  const listNotifications = notifications.filter(n => n.data?.type !== 'visit_deleted' || n.read_at);
+
+  const deletedNotifications = notifications.filter(n => n.data?.type === 'visit_deleted' && !n.read_at);
+
   // Handle deleted notification popup
   const currentDeletedNotif = deletedNotifications[0]; // Process one by one
+
+  // --- HELPER FUNCTIONS ---
+
+  const markAsReadLocally = (id) => {
+    // Immediate UI update without waiting for API
+    setNotifications(prev => prev.map(n =>
+      n.id === id ? { ...n, read_at: new Date().toISOString() } : n
+    ));
+  };
 
   const handleDismissDeleted = async () => {
     if (currentDeletedNotif) {
@@ -62,52 +73,6 @@ export default function InboxIndex() {
       }
     }
   };
-
-  console.log("Inbox - User role:", role); // Debug log
-
-  useEffect(() => {
-    fetchNotifications();
-
-    // Auto-refresh notifications every 10 seconds (Real-time simulation)
-    const interval = setInterval(() => {
-      // Silent refresh - don't show loading
-      const fetchSilent = async () => {
-        try {
-          const res = await api.get("/notifications");
-          if (res.data.success) {
-            const list = res.data.data?.data || [];
-            // Check for new deleted notifications to verify instant popup
-            const hasNewDeleted = list.some(n => n.data?.type === 'visit_deleted' && !n.read_at);
-            if (hasNewDeleted) {
-              // Determine if we need to force update or if state update will handle it
-            }
-            setNotifications(list);
-          }
-        } catch (err) {
-          console.error("Silent refresh failed", err);
-        }
-      };
-      fetchSilent();
-    }, 10000); // 10 seconds interval
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // === HARDWARE BACK BUTTON SUPPORT ===
-  useEffect(() => {
-    const handlePopState = (event) => {
-      // If we popped a state and we are in detail view, close it
-      setSelectedNotification(prev => {
-        if (prev) {
-          return null; // Close detail view
-        }
-        return prev;
-      });
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   const fetchNotifications = async () => {
     // Safety timeout to ensure loading doesn't stick
@@ -148,13 +113,6 @@ export default function InboxIndex() {
     } catch (err) {
       console.error("Failed to mark all as read", err);
     }
-  };
-
-  const markAsReadLocally = (id) => {
-    // Immediate UI update without waiting for API
-    setNotifications(prev => prev.map(n =>
-      n.id === id ? { ...n, read_at: new Date().toISOString() } : n
-    ));
   };
 
   const handleNotificationClick = async (notif) => {
@@ -241,6 +199,7 @@ export default function InboxIndex() {
 
     // Refresh notifications without blocking UI
     fetchNotifications();
+    // if (role === 'koordinator') fetchPendingVerifications();
   };
 
   const formatDate = (dateString) => {
@@ -252,6 +211,57 @@ export default function InboxIndex() {
       minute: "2-digit",
     });
   };
+
+  // --- EFFECTS ---
+
+  useEffect(() => {
+    fetchNotifications();
+
+    // Auto-refresh notifications every 10 seconds (Real-time simulation)
+    const interval = setInterval(() => {
+      // Silent refresh - don't show loading
+      const fetchSilent = async () => {
+        try {
+          const res = await api.get("/notifications");
+          if (res.data.success) {
+            const list = res.data.data?.data || [];
+            // Check for new deleted notifications to verify instant popup
+            const hasNewDeleted = list.some(n => n.data?.type === 'visit_deleted' && !n.read_at);
+            if (hasNewDeleted) {
+              // Determine if we need to force update or if state update will handle it
+            }
+            setNotifications(list);
+          }
+        } catch (err) {
+          // Ignore network errors/aborted requests during silent refresh to avoid console noise
+          if (err.code !== 'ERR_NETWORK' && err.code !== 'ECONNABORTED' && !api.isCancel(err)) {
+            console.error("Silent refresh failed", err);
+          }
+        }
+      };
+      fetchSilent();
+    }, 10000); // 10 seconds interval
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // === HARDWARE BACK BUTTON SUPPORT ===
+  useEffect(() => {
+    const handlePopState = (event) => {
+      // If we popped a state and we are in detail view, close it
+      setSelectedNotification(prev => {
+        if (prev) {
+          return null; // Close detail view
+        }
+        return prev;
+      });
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  console.log("Inbox - User role:", role); // Debug log
 
   return (
     <div className="h-[calc(100vh-80px)] flex bg-slate-50 overflow-hidden">
@@ -305,27 +315,38 @@ export default function InboxIndex() {
                   }`}
               >
                 <div className="flex justify-between items-start mb-1">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                    <Icon icon={
-                      notif.data?.type === 'verification_batch' ? "mdi:buffer" :
-                        notif.data?.type === 'visit_updated' ? "mdi:pencil-circle-outline" :
-                          notif.data?.type === 'new_visit' ? "mdi:plus-circle-outline" :
-                            notif.data?.type === 'visit_deleted' ? "mdi:trash-can-outline" :
-                              "mdi:bell-outline"
-                    } className={
-                      notif.data?.type === 'verification_batch' ? "text-indigo-600" :
-                        notif.data?.type === 'visit_updated' ? "text-amber-600" :
-                          notif.data?.type === 'new_visit' ? "text-green-600" :
-                            notif.data?.type === 'visit_deleted' ? "text-red-600" :
-                              "text-slate-400"
-                    } />
-                    <span>
-                      {notif.data?.type === 'verification_batch' ? 'Verifikasi' :
-                        notif.data?.type === 'visit_updated' ? 'Revisi Selesai' :
-                          notif.data?.type === 'new_visit' ? 'Kunjungan Baru' :
-                            notif.data?.type === 'visit_deleted' ? 'Kunjungan Dihapus' :
-                              'Sistem'}
-                    </span>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const type = notif.data?.type;
+                      let badgeClass = 'bg-slate-50 text-slate-600 border-slate-200';
+                      let iconName = 'mdi:bell';
+                      let label = 'Sistem';
+
+                      if (type === 'verification_batch') {
+                        badgeClass = 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                        iconName = 'mdi:buffer';
+                        label = 'Perlu Verifikasi';
+                      } else if (type === 'visit_updated') {
+                        badgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
+                        iconName = 'mdi:pencil-circle';
+                        label = 'Revisi Selesai';
+                      } else if (type === 'new_visit') {
+                        badgeClass = 'bg-green-50 text-green-700 border-green-200';
+                        iconName = 'mdi:plus-circle';
+                        label = 'Kunjungan Baru';
+                      } else if (type === 'visit_deleted') {
+                        badgeClass = 'bg-red-50 text-red-700 border-red-200';
+                        iconName = 'mdi:trash-can';
+                        label = 'Kunjungan Dihapus';
+                      }
+
+                      return (
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 border shadow-sm ${badgeClass}`}>
+                          <Icon icon={iconName} width={14} />
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-slate-400">{formatDate(notif.created_at)}</span>
@@ -404,6 +425,6 @@ export default function InboxIndex() {
         )}
       </div>
 
-    </div>
+    </div >
   );
 }

@@ -7,15 +7,18 @@ use Illuminate\Database\Eloquent\Model;
 class Engagement extends Model
 {
     protected $table = 'engagements';
+
     protected $fillable = [
         'content_platform_id',
         'likes',
         'views',
-        'recorded_at',
+        'start_date',
+        'end_date',
     ];
 
     protected $casts = [
-        'recorded_at' => 'date',
+        'start_date' => 'date',
+        'end_date' => 'date',
     ];
 
     public function contentPlatform()

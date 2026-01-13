@@ -57,22 +57,50 @@ export default function CameraCapture({ onCapture, onClose }) {
 
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+
+        // Settings crop sesuai visual guide (KTP Ratio ~ 1.58:1)
+        // Kita ambil 85% lebar frame (sesuai UI mobile)
+        const videoW = video.videoWidth;
+        const videoH = video.videoHeight;
+
+        // Logika Crop:
+        // 1. Target Width = 85% dari lebar video (agar resolusi tinggi)
+        // 2. Target Height = Width / 1.58
+        let cropWidth = videoW * 0.85;
+        let cropHeight = cropWidth / 1.58;
+
+        // Safety: Jangan sampai height melebihi video
+        if (cropHeight > videoH * 0.9) {
+            cropHeight = videoH * 0.9;
+            cropWidth = cropHeight * 1.58;
+        }
+
+        // Center Crop Coordinates
+        const startX = (videoW - cropWidth) / 2;
+        const startY = (videoH - cropHeight) / 2;
+
+        // Set output resolusi (High Quality)
+        canvas.width = cropWidth;
+        canvas.height = cropHeight;
 
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Draw cropped area
+        ctx.drawImage(
+            video,
+            startX, startY, cropWidth, cropHeight, // Source Crop
+            0, 0, canvas.width, canvas.height      // Destination
+        );
 
         canvas.toBlob((blob) => {
             if (blob) {
-                const file = new File([blob], `ktp_${Date.now()}.jpg`, { type: "image/jpeg" });
+                const file = new File([blob], `ktp_crop_${Date.now()}.jpg`, { type: "image/jpeg" });
                 onCapture(file);
                 stopCamera();
                 onClose();
             }
-        }, "image/jpeg", 0.85);
+        }, "image/jpeg", 0.9); // Quality sedikit dinaikkan karena sizenya kecil (cropped)
     };
 
     return (

@@ -204,7 +204,7 @@ export default function PaslonIndex() {
 
       {/* HEADER & FILTER */}
       <div className="bg-white rounded-2xl border border-slate-300 shadow-sm p-4 space-y-3">
-        <h1 className="text-xl md:text-2xl font-bold text-slate-800">
+        <h1 className="text-3xl font-bold text-blue-900">
           Perolehan Suara Gubernur
         </h1>
 

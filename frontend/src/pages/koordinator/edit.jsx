@@ -24,7 +24,7 @@ export default function EditKoordinator() {
   const [districts, setDistricts] = useState([]);
   const [villages, setVillages] = useState([]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   /* =============================
       LOAD DETAIL KOORDINATOR

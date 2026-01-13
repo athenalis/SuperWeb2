@@ -29,7 +29,7 @@ class KunjunganController extends Controller
     {
         try {
             $rules = [
-                'nama' => 'required|string|max:255',
+                'nama' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\.\`\']+$/'],
                 'nik' => [
                     'required',
                     'digits:16',
@@ -237,7 +237,7 @@ class KunjunganController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'nama' => 'required|string|max:255',
+                'nama' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\.\`\']+$/'],
                 'nik' => [
                     'required',
                     'digits:16',
@@ -253,9 +253,8 @@ class KunjunganController extends Controller
                 'tanggal_lahir' => [
                     'required',
                     'date',
-                    'before_or_equal:' . Carbon::now()->subYears(17)->format('Y-m-d'),
                 ],
-                'hubungan' => 'required|in:ayah,ibu,anak,lainnya',
+                'hubungan' => 'required|string|max:50',
                 'pekerjaan' => 'nullable|string|max:255',
                 'pendidikan' => 'required|string',
                 'penghasilan' => 'required|string',
@@ -266,9 +265,7 @@ class KunjunganController extends Controller
                 'nik.digits' => 'NIK harus 16 digit',
                 'tanggal_lahir.required' => 'Tanggal lahir wajib diisi',
                 'tanggal_lahir.date' => 'Format tanggal lahir tidak valid',
-                'tanggal_lahir.before_or_equal' => 'Umur minimal harus 17 tahun',
                 'hubungan.required' => 'Hubungan keluarga wajib dipilih',
-                'hubungan.in' => 'Hubungan keluarga tidak valid',
                 'pendidikan.required' => 'Pendidikan wajib diisi',
                 'penghasilan.required' => 'Penghasilan wajib diisi',
                 'foto_ktp.max' => 'Ukuran foto maksimal 5MB'
@@ -297,7 +294,7 @@ class KunjunganController extends Controller
 
             DB::beginTransaction();
 
-            $fotoPath = null;
+            $fotoPath = 'pending.jpg';
             if ($request->hasFile('foto_ktp')) {
                 $file = $request->file('foto_ktp');
                 $ext = $file->getClientOriginalExtension();
@@ -712,6 +709,15 @@ class KunjunganController extends Controller
 
             $kunjungan->update($data);
 
+            // [CLEANUP] Hapus notifikasi lama terkait kunjungan ini agar tidak "nabun" (menumpuk)
+            // User akan melihat status terbaru saja (Revisi Selesai)
+            DB::table('notifications')
+                ->where('data', 'LIKE', '%"visit_id":' . $id . '%')
+                ->orWhere('data', 'LIKE', '%"visit_id": "' . $id . '"%')
+                ->orWhere('data', 'LIKE', '%"visit_id":"' . $id . '"%')
+                ->orWhere('data', 'LIKE', '%"kunjungan_id":' . $id . '%')
+                ->delete();
+
             // [NOTIFICATION LOGIC]
             try {
                 $user = auth()->user();
@@ -842,7 +848,9 @@ class KunjunganController extends Controller
 
             // [LOGIC TAMBAHAN] Reset status verifikasi kunjungan (parent) jika ditolak
             // Agar bisa diverifikasi ulang oleh koordinator
-            $kunjunganParent = $anggota->keluargaForm->kunjungan ?? null;
+            $keluargaForm = $anggota->keluargaForm;
+            $kunjunganParent = $keluargaForm ? $keluargaForm->kunjungan : null;
+
             if ($kunjunganParent && $kunjunganParent->status_verifikasi === 'rejected') {
                 $kunjunganParent->status_verifikasi = 'pending';
                 $kunjunganParent->verified_by = null;
@@ -867,9 +875,8 @@ class KunjunganController extends Controller
                 'tanggal_lahir' => [
                     'required',
                     'date',
-                    'before_or_equal:' . Carbon::now()->subYears(17)->format('Y-m-d'),
                 ],
-                'hubungan' => 'required|in:ayah,ibu,anak,lainnya',
+                'hubungan' => 'required|string|max:50',
                 'pekerjaan' => 'nullable|string|max:255',
                 'pendidikan' => 'required|string',
                 'penghasilan' => 'required|string',
@@ -1094,6 +1101,41 @@ class KunjunganController extends Controller
                 'count' => $batchCount,
                 'redirect_url' => "/kunjungan?relawan_id={$nextRelawan->id}&status=pending&batch=true&limit=5"
             ]
+        ]);
+    }
+    /**
+     * CHECK NIK AVAILABILITY (Relawan)
+     * Limit return data to protect privacy, only validation status.
+     */
+    public function checkNik(Request $request)
+    {
+        $request->validate([
+            'nik' => 'required|digits:16'
+        ]);
+
+        $nik = $request->nik;
+
+        // Check 1: As Head of Family (kunjungan_forms)
+        $existsAsHead = DB::table('kunjungan_forms')->where('nik', $nik)->exists();
+        if ($existsAsHead) {
+            return response()->json([
+                'available' => false,
+                'message' => 'NIK sudah terdaftar sebagai Kepala Keluarga.'
+            ]);
+        }
+
+        // Check 2: As Family Member (keluarga_members)
+        $existsAsMember = DB::table('keluarga_members')->where('nik', $nik)->exists();
+        if ($existsAsMember) {
+            return response()->json([
+                'available' => false,
+                'message' => 'NIK sudah terdaftar sebagai Anggota Keluarga.'
+            ]);
+        }
+
+        return response()->json([
+            'available' => true,
+            'message' => 'NIK tersedia.'
         ]);
     }
 }

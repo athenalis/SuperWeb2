@@ -54,6 +54,11 @@ class ContentPlan extends Model
             'influencer_id'
         );
     }
+    public function ads()
+    {
+        return $this->hasMany(ContentPlatformAd::class, 'content_plan_id')
+            ->withTrashed();
+    }
 
     /* ======================
         ACCESSOR
@@ -61,12 +66,11 @@ class ContentPlan extends Model
 
     public function getTotalBudgetAttribute()
     {
-        $budgetContent = $this->budget?->budget_content ?? 0;
+        $budgetContent = $this->budgetWithTrashed?->budget_content ?? 0;
 
-        $adsBudget = $this->contentPlatforms
-            ->sum(fn ($cp) =>
-                $cp->ads ? $cp->ads->budget_ads : 0
-            );
+        $adsBudget = ContentPlatformAd::withTrashed()
+            ->where('content_plan_id', $this->id)
+            ->sum('budget_ads');
 
         return $budgetContent + $adsBudget;
     }

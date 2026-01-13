@@ -114,10 +114,43 @@ export default function KunjunganIndex() {
         );
     };
 
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [lastSyncTime, setLastSyncTime] = useState(null);
+
+    // Initial Load & Listeners
     useEffect(() => {
         fetchKunjungan();
         loadOfflineData();
-    }, [statusFilter, searchParams]); // Re-fetch when filter or params change
+
+        // Listener for Auto-Sync completion
+        const handleSyncComplete = () => {
+            loadOfflineData();
+            fetchKunjungan();
+            setLastSyncTime(new Date());
+        };
+        window.addEventListener('sync-complete', handleSyncComplete);
+
+        // Network Status Listeners
+        const handleStatusChange = () => {
+            const online = navigator.onLine;
+            setIsOnline(online);
+            if (online) {
+                toast.success("Koneksi kembali! Mencoba sinkronisasi...");
+                // Trigger sync immediately when back online handled by syncService listener
+                // But we can also manually trigger just in case
+            } else {
+                toast("Anda sedang offline", { icon: "📶" });
+            }
+        };
+        window.addEventListener('online', handleStatusChange);
+        window.addEventListener('offline', handleStatusChange);
+
+        return () => {
+            window.removeEventListener('sync-complete', handleSyncComplete);
+            window.removeEventListener('online', handleStatusChange);
+            window.removeEventListener('offline', handleStatusChange);
+        };
+    }, [statusFilter, searchParams]);
 
     const loadOfflineData = async () => {
         try {
@@ -163,9 +196,11 @@ export default function KunjunganIndex() {
             if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
             if (statusFilter !== "all") url += `&status=${statusFilter}`;
 
-            // Batch param handling
+            // Batch param handling (with default limit 5 as requested, using smart grid to fill spaces)
+            const limit = isBatchMode ? batchLimit : 5;
+            url += `&per_page=${limit}`;
+
             if (isBatchMode) {
-                url += `&per_page=${batchLimit}`;
                 if (searchParams.get("relawan_id")) {
                     url += `&relawan_id=${searchParams.get("relawan_id")}`;
                 }
@@ -235,6 +270,23 @@ export default function KunjunganIndex() {
 
         setIsDeleting(true);
         try {
+            // Check if it's an offline ID
+            if (deleteModal.id.toString().startsWith('off_')) {
+                await offlineDb.deleteVisit(deleteModal.id);
+                toast.success("Data offline berhasil dihapus", {
+                    icon: '🗑️',
+                    style: {
+                        borderRadius: '10px',
+                        background: '#333',
+                        color: '#fff',
+                    },
+                });
+                setOfflineItems(offlineItems.filter(item => item.offline_id !== deleteModal.id));
+                closeDeleteModal();
+                return;
+            }
+
+            // Normal server delete
             const res = await api.delete(`/kunjungan/${deleteModal.id}`);
             if (res.data.success) {
                 toast.success("Data kunjungan berhasil dihapus", {
@@ -284,7 +336,7 @@ export default function KunjunganIndex() {
     };
 
     const getStatusLabel = (item) => {
-        if (item.sync_status === 'pending') return "Menunggu Sinkron";
+        if (item.sync_status === 'pending') return "📶 Menunggu Sinkron";
         if (item.status === 'draft') return "Belum Selesai";
         switch (item.status_verifikasi) {
             case "accepted":
@@ -302,6 +354,19 @@ export default function KunjunganIndex() {
         <div className="space-y-4 md:space-y-6 text-slate-900 overflow-x-hidden">
 
             {/* DELETE MODAL */}
+            {/* OFFLINE BANNER */}
+            {!isOnline && (
+                <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r shadow-sm flex items-center justify-between animate-fade-in">
+                    <div className="flex items-center gap-3">
+                        <Icon icon="mdi:wifi-off" className="text-amber-500 text-2xl" />
+                        <div>
+                            <p className="font-bold text-amber-800">Mode Offline</p>
+                            <p className="text-sm text-amber-700">Perubahan akan disimpan di perangkat dan disinkronkan saat online.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* DELETE MODAL */}
             <ConfirmationModal
                 isOpen={deleteModal.isOpen}
@@ -383,7 +448,13 @@ export default function KunjunganIndex() {
                             </button>
                         )}
                         <button
-                            onClick={() => navigate("/kunjungan/anggota")}
+                            onClick={() => {
+                                // Explicitly clear drafts to ensure fresh start
+                                localStorage.removeItem("kunjungan_draft_v1");
+                                localStorage.removeItem("kunjungan_draft_step1");
+                                localStorage.removeItem("kunjungan_draft_members");
+                                navigate("/kunjungan/anggota");
+                            }}
                             className="bg-blue-900 text-white px-6 py-3 rounded-lg hover:bg-blue-800 transition-all shadow-md flex items-center gap-2 whitespace-nowrap"
                         >
                             <Icon icon="mdi:plus" width="22" />
@@ -496,156 +567,176 @@ export default function KunjunganIndex() {
             ) : (
                 <div className="bg-slate-50 rounded-2xl p-4 md:p-6">
 
-                    {/* DESKTOP GRID */}
-                    <div className="hidden md:grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-                        {displayData.map(item => (
-                            <div
-                                key={item.id || item.offline_id}
-                                onClick={() => {
-                                    if (item.sync_status === 'pending') {
-                                        toast.info("Data ini disimpan offline. Silakan klik tombol 'Sync' untuk mengunggah.");
-                                        return;
-                                    }
-                                    window.location.href = `/kunjungan/${item.id}`;
-                                }}
-                                className="bg-white border text-sm border-slate-200 rounded-2xl p-5 shadow-sm cursor-pointer hover:border-blue-400 hover:shadow-md transition-all relative overflow-hidden"
-                            >
-                                {/* Status Badge */}
-                                <div className="absolute top-0 right-0 p-4">
-                                    <div className="flex flex-col items-end gap-1">
-                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black border ${getStatusColor(item)}`}>
-                                            {getStatusLabel(item)}
-                                        </span>
-                                        {item.status === 'draft' && (
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                                                (Tap pendaftaran)
+                    {/* DESKTOP SMART GRID (6 Columns Base) */}
+                    <div className="hidden md:grid grid-cols-1 lg:grid-cols-6 gap-5">
+                        {displayData.map((item, index) => {
+                            // Smart Span Logic for 5 items (or any count)
+                            // Goal: Fill the row perfectly.
+                            // If Total 5: First 3 are col-span-2 (33%), Last 2 are col-span-3 (50%)
+                            const total = displayData.length;
+                            let spanClass = "lg:col-span-2"; // Default 3 per row
+
+                            if (total === 5) {
+                                if (index >= 3) spanClass = "lg:col-span-3";
+                            } else if (total === 4) {
+                                spanClass = "lg:col-span-3"; // 2 per row
+                            } else if (total === 2) {
+                                spanClass = "lg:col-span-3";
+                            } else if (total === 1) {
+                                spanClass = "lg:col-span-6 max-w-2xl mx-auto w-full";
+                            }
+
+                            return (
+                                <div
+                                    key={item.id || item.offline_id}
+                                    onClick={() => {
+                                        if (item.sync_status === 'pending') {
+                                            toast.info("Data ini disimpan offline. Silakan klik tombol 'Sync' untuk mengunggah.");
+                                            return;
+                                        }
+                                        window.location.href = `/kunjungan/${item.id}`;
+                                    }}
+                                    className={`${spanClass} bg-white border text-sm border-slate-200 rounded-2xl p-5 shadow-sm cursor-pointer hover:border-blue-400 hover:shadow-md transition-all relative overflow-hidden`}
+                                >
+                                    {/* Status Badge */}
+                                    <div className="absolute top-0 right-0 p-4">
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black border ${getStatusColor(item)}`}>
+                                                {getStatusLabel(item)}
                                             </span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="flex items-start gap-4 mb-4">
-                                    <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-600/20 text-white">
-                                        <Icon icon="mdi:account-group" width="24" />
-                                    </div>
-                                    <div className="pr-20">
-                                        <h3 className="font-bold text-lg text-slate-900 mb-1 leading-tight line-clamp-1">
-                                            {item.nama}
-                                        </h3>
-                                        <div className="flex items-center gap-2 text-slate-500 text-xs font-mono bg-slate-100 px-2 py-1 rounded w-fit">
-                                            <Icon icon="mdi:card-account-details" width="14" />
-                                            {item.nik}
+                                            {item.status === 'draft' && (
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                                    (Tap pendaftaran)
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
-                                </div>
 
-                                <div className="space-y-2 mb-4">
-                                    <div className="flex items-center gap-2 text-slate-600">
-                                        <Icon icon="mdi:map-marker" width="16" className="text-red-500 flex-shrink-0" />
-                                        <p className="truncate text-xs font-medium">{item.alamat}</p>
-                                    </div>
-                                    <div className="flex items-center gap-4 text-xs text-slate-500">
-                                        <div className="flex items-center gap-1.5">
-                                            <Icon icon="mdi:calendar" width="14" />
-                                            {formatDate(item.created_at)}
+                                    <div className="flex items-start gap-4 mb-4">
+                                        <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-600/20 text-white">
+                                            <Icon icon="mdi:account-group" width="24" />
                                         </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <Icon icon="mdi:account" width="14" />
-                                            {item.family_form?.members_count || 0} Anggota
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            window.location.href = `/kunjungan/${item.id}`;
-                                        }}
-                                        className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100 transition-colors"
-                                        title="Lihat Detail"
-                                    >
-                                        <Icon icon="mdi:eye" width="20" />
-                                    </button>
-
-                                    {/* Edit Button (Only Pending) */}
-                                    {item.status_verifikasi === 'pending' && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                window.location.href = `/kunjungan/${item.id}/edit`;
-                                            }}
-                                            className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center hover:bg-amber-100 transition-colors"
-                                            title="Edit Data"
-                                        >
-                                            <Icon icon="mdi:pencil" width="20" />
-                                        </button>
-                                    )}
-
-                                    {role === "relawan" && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                openDeleteModal(item.id, item.nama);
-                                            }}
-                                            className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100 transition-colors"
-                                        >
-                                            <Icon icon="mdi:trash-can" width="20" />
-                                        </button>
-                                    )}
-                                </div>
-
-                                {/* Expandable Members */}
-                                {item.family_form?.members?.length > 0 && (
-                                    <div className="mt-4 pt-4 border-t border-slate-100">
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); toggleExpand(item.id); }}
-                                            className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors w-full"
-                                        >
-                                            <Icon
-                                                icon="mdi:chevron-down"
-                                                width="16"
-                                                className={`transition-transform duration-200 ${expandedRows.includes(item.id) ? 'rotate-180' : ''}`}
-                                            />
-                                            <span>{expandedRows.includes(item.id) ? 'Sembunyikan' : 'Lihat'} Anggota Keluarga ({item.family_form.members.length})</span>
-                                        </button>
-
-                                        {expandedRows.includes(item.id) && (
-                                            <div className="mt-3 space-y-2 pl-2">
-                                                {item.family_form.members.map((member) => (
-                                                    <div key={member.id} className="bg-slate-50/50 rounded-lg p-2 border border-slate-100 text-xs">
-                                                        <div className="flex justify-between items-start mb-1">
-                                                            <span className="font-semibold text-slate-700">{member.nama}</span>
-                                                            <span className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-bold capitalize">
-                                                                {member.hubungan}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                                                            <span className="font-mono">{member.nik}</span>
-                                                            <span>•</span>
-                                                            <span>{member.umur} Thn</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                        <div className="pr-20">
+                                            <h3 className="font-bold text-lg text-slate-900 mb-1 leading-tight line-clamp-1">
+                                                {item.nama}
+                                            </h3>
+                                            <div className="flex items-center gap-2 text-slate-500 text-xs font-mono bg-slate-100 px-2 py-1 rounded w-fit">
+                                                <Icon icon="mdi:card-account-details" width="14" />
+                                                {item.nik}
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2 mb-4">
+                                        <div className="flex items-center gap-2 text-slate-600">
+                                            <Icon icon="mdi:map-marker" width="16" className="text-red-500 flex-shrink-0" />
+                                            <p className="truncate text-xs font-medium">{item.alamat}</p>
+                                        </div>
+                                        <div className="flex items-center gap-4 text-xs text-slate-500">
+                                            <div className="flex items-center gap-1.5">
+                                                <Icon icon="mdi:calendar" width="14" />
+                                                {formatDate(item.created_at)}
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <Icon icon="mdi:account" width="14" />
+                                                {item.family_form?.members_count || 0} Anggota
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                window.location.href = `/kunjungan/${item.id}`;
+                                            }}
+                                            className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100 transition-colors"
+                                            title="Lihat Detail"
+                                        >
+                                            <Icon icon="mdi:eye" width="20" />
+                                        </button>
+
+                                        {/* Edit Button (Only Pending) */}
+                                        {item.status_verifikasi === 'pending' && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    window.location.href = `/kunjungan/${item.id}/edit`;
+                                                }}
+                                                className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center hover:bg-amber-100 transition-colors"
+                                                title="Edit Data"
+                                            >
+                                                <Icon icon="mdi:pencil" width="20" />
+                                            </button>
+                                        )}
+
+                                        {role === "relawan" && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const deleteId = item.sync_status === 'pending' ? item.offline_id : item.id;
+                                                    openDeleteModal(deleteId, item.nama);
+                                                }}
+                                                className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100 transition-colors"
+                                                title="Hapus Data"
+                                            >
+                                                <Icon icon="mdi:trash-can" width="20" />
+                                            </button>
                                         )}
                                     </div>
-                                )}
-                            </div>
-                        ))}
+
+                                    {/* Expandable Members */}
+                                    {item.family_form?.members?.length > 0 && (
+                                        <div className="mt-4 pt-4 border-t border-slate-100">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); toggleExpand(item.id); }}
+                                                className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors w-full"
+                                            >
+                                                <Icon
+                                                    icon="mdi:chevron-down"
+                                                    width="16"
+                                                    className={`transition-transform duration-200 ${expandedRows.includes(item.id) ? 'rotate-180' : ''}`}
+                                                />
+                                                <span>{expandedRows.includes(item.id) ? 'Sembunyikan' : 'Lihat'} Anggota Keluarga ({item.family_form.members.length})</span>
+                                            </button>
+
+                                            {expandedRows.includes(item.id) && (
+                                                <div className="mt-3 space-y-2 pl-2">
+                                                    {item.family_form.members.map((member) => (
+                                                        <div key={member.id} className="bg-slate-50/50 rounded-lg p-2 border border-slate-100 text-xs">
+                                                            <div className="flex justify-between items-start mb-1">
+                                                                <span className="font-semibold text-slate-700">{member.nama}</span>
+                                                                <span className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-bold capitalize">
+                                                                    {member.hubungan}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                                <span className="font-mono">{member.nik}</span>
+                                                                <span>•</span>
+                                                                <span>{member.umur} Thn</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
 
-                    {/* MOBILE LIST */}
+                    {/* MOBILE LIST - OPTIMIZED FOR LOW-END DEVICES */}
                     <div className="md:hidden space-y-3">
                         {
                             displayData.map(item => (
                                 <div
                                     key={item.id || item.offline_id}
-                                    className="bg-gradient-to-br from-white to-slate-50 border-2 border-slate-200 rounded-2xl p-4 space-y-4 hover:border-blue-400 hover:shadow-lg transition-all duration-300"
+                                    className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm active:shadow transition-shadow"
                                 >
 
                                     <div
-                                        className="cursor-pointer active:opacity-70 transition-opacity"
+                                        className="cursor-pointer active:bg-slate-50 rounded-lg -m-1 p-1"
                                         onClick={() => {
                                             if (item.sync_status === 'pending') {
                                                 toast.info("Data offline. Silakan sinkronkan terlebih dahulu.");
@@ -658,58 +749,52 @@ export default function KunjunganIndex() {
                                             }
                                         }}
                                     >
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div className="flex-1">
-                                                <h3 className="font-bold text-base text-slate-900 mb-1 line-clamp-1">{item.nama}</h3>
-                                                <div className="flex items-center gap-2 text-slate-600">
-                                                    <div className="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                                                        <Icon icon="mdi:card-account-details" width="14" className="text-blue-600" />
-                                                    </div>
-                                                    <p className="text-xs font-mono font-medium">{item.nik}</p>
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="font-bold text-base text-slate-900 mb-1 truncate">{item.nama}</h3>
+                                                <div className="flex items-center gap-1.5 text-slate-600">
+                                                    <Icon icon="mdi:card-account-details" width="14" className="text-blue-600 flex-shrink-0" />
+                                                    <p className="text-xs font-mono truncate">{item.nik}</p>
                                                 </div>
                                             </div>
 
-                                            <span className={`px-3 py-1.5 rounded-full text-[10px] font-bold border-2 whitespace-nowrap ml-2 ${getStatusColor(item)}`}>
+                                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ml-2 flex-shrink-0 ${getStatusColor(item)}`}>
                                                 {getStatusLabel(item)}
                                             </span>
                                         </div>
 
-                                        <div className="flex items-start gap-2 text-slate-600 bg-slate-50 rounded-lg p-2.5 border border-slate-100">
-                                            <div className="w-6 h-6 rounded-lg bg-green-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                                <Icon icon="mdi:map-marker" width="14" className="text-green-600" />
-                                            </div>
+                                        <div className="flex items-start gap-1.5 text-slate-600 bg-slate-50 rounded-lg p-2 mb-2">
+                                            <Icon icon="mdi:map-marker" width="14" className="text-green-600 flex-shrink-0 mt-0.5" />
                                             <p className="text-xs line-clamp-2 leading-relaxed">{item.alamat}</p>
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between pt-3 border-t-2 border-slate-100">
-                                        <div className="flex items-center gap-2">
-                                            <div className="flex items-center gap-1.5 text-slate-500">
-                                                <Icon icon="mdi:calendar-outline" width="14" />
-                                                <span className="text-[10px] font-semibold">
+                                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                            <div className="flex items-center gap-1">
+                                                <Icon icon="mdi:calendar-outline" width="12" />
+                                                <span className="font-semibold">
                                                     {new Date(item.created_at).toLocaleDateString("id-ID", { day: '2-digit', month: 'short' })}
                                                 </span>
                                             </div>
-                                            <span className="text-slate-300">•</span>
-                                            <div className="flex items-center gap-1.5">
-                                                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm">
-                                                    <span className="text-[10px] font-black text-white">{item.family_form?.members_count || 0}</span>
-                                                </div>
-                                                <span className="text-[10px] font-semibold text-slate-600">Anggota</span>
+                                            <span>•</span>
+                                            <div className="flex items-center gap-1">
+                                                <Icon icon="mdi:account-group" width="12" />
+                                                <span className="font-semibold">{item.family_form?.members_count || 0}</span>
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex items-center gap-2">
                                             {item.status === 'draft' ? (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         window.location.href = `/kunjungan/${item.id}/edit`;
                                                     }}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-bold shadow-sm active:scale-95 transition-transform"
+                                                    className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-[11px] font-bold shadow-sm active:scale-95"
                                                 >
                                                     <Icon icon="mdi:pencil-outline" width="14" />
-                                                    Selesaikan
+                                                    Lanjut
                                                 </button>
                                             ) : (
                                                 item.status_verifikasi === 'pending' && (
@@ -718,50 +803,54 @@ export default function KunjunganIndex() {
                                                             e.stopPropagation();
                                                             window.location.href = `/kunjungan/${item.id}/edit`;
                                                         }}
-                                                        className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 active:scale-95 transition-all"
+                                                        className="p-2.5 bg-amber-50 text-amber-600 rounded-lg active:bg-amber-100"
                                                     >
-                                                        <Icon icon="mdi:pencil-outline" width="16" />
+                                                        <Icon icon="mdi:pencil-outline" width="18" />
                                                     </button>
                                                 )
                                             )}
 
                                             {role === "relawan" && (
                                                 <button
-                                                    onClick={(e) => { e.stopPropagation(); openDeleteModal(item.id, item.nama); }}
-                                                    className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 active:scale-95 transition-all"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const deleteId = item.sync_status === 'pending' ? item.offline_id : item.id;
+                                                        openDeleteModal(deleteId, item.nama);
+                                                    }}
+                                                    className="p-2.5 bg-red-50 text-red-600 rounded-lg active:bg-red-100"
                                                 >
-                                                    <Icon icon="mdi:trash-can" width="16" />
+                                                    <Icon icon="mdi:trash-can" width="18" />
                                                 </button>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* TOGGLE ANGGOTA MOBILE */}
+                                    {/* TOGGLE ANGGOTA MOBILE - Simplified */}
                                     {item.family_form?.members?.length > 0 && (
-                                        <div className="w-full mt-3 pt-3 border-t border-slate-100">
+                                        <div className="mt-2 pt-2 border-t border-slate-100">
                                             <button
-                                                onClick={() => toggleExpand(item.id)}
-                                                className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                                                onClick={(e) => { e.stopPropagation(); toggleExpand(item.id); }}
+                                                className="flex items-center gap-1 text-xs font-bold text-blue-600 active:text-blue-800"
                                             >
                                                 <Icon icon={expandedRows.includes(item.id) ? "mdi:chevron-up" : "mdi:chevron-down"} width="18" />
-                                                {expandedRows.includes(item.id) ? "Sembunyikan Anggota" : "Lihat Anggota Keluarga"}
+                                                {expandedRows.includes(item.id) ? "Sembunyikan" : `Lihat ${item.family_form.members.length} Anggota`}
                                             </button>
 
                                             {expandedRows.includes(item.id) && (
-                                                <div className="mt-3 space-y-2 bg-slate-50/50 rounded-lg p-2">
-                                                    <div className="grid grid-cols-[1fr_80px_auto] gap-2 px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200">
-                                                        <span>Nama</span>
-                                                        <span>Hubungan</span>
-                                                        <span>Umur</span>
-                                                    </div>
+                                                <div className="mt-2 space-y-1.5">
                                                     {item.family_form.members.map((member) => (
-                                                        <div key={member.id} className="grid grid-cols-[1fr_80px_auto] gap-2 px-2 py-2 text-xs border-b border-slate-100 last:border-0">
-                                                            <div>
-                                                                <div className="font-semibold text-slate-700">{member.nama}</div>
-                                                                <div className="text-[10px] text-slate-500 font-mono">{member.nik}</div>
+                                                        <div key={member.id} className="bg-slate-50 rounded-lg p-2 text-xs border border-slate-100">
+                                                            <div className="flex justify-between items-center mb-1">
+                                                                <span className="font-semibold text-slate-700 truncate flex-1">{member.nama}</span>
+                                                                <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-bold capitalize ml-1">
+                                                                    {member.hubungan}
+                                                                </span>
                                                             </div>
-                                                            <div className="capitalize text-slate-600">{member.hubungan}</div>
-                                                            <div className="text-slate-600">{member.umur} Thn</div>
+                                                            <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                                <span className="font-mono truncate">{member.nik}</span>
+                                                                <span>•</span>
+                                                                <span>{member.umur} Thn</span>
+                                                            </div>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -774,68 +863,76 @@ export default function KunjunganIndex() {
                         }
                     </div >
 
-                    {/* PAGINATION */}
+                    {/* PAGINATION (Styled) */}
                     {
-                        pagination && pagination.last_page > 1 && (
-                            <div className="px-6 py-4 bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between gap-4">
-                                <span className="text-xs text-slate-500 italic">
-                                    Menampilkan {displayData.length} data
-                                </span>
-
-                                <div className="flex gap-1">
+                        pagination && (
+                            <div className="flex justify-center mt-6 mb-8 px-4">
+                                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-1.5 flex items-center gap-2">
                                     {/* PREV */}
                                     <button
                                         disabled={pagination.current_page === 1}
                                         onClick={() => fetchKunjungan(pagination.current_page - 1)}
-                                        className="px-3 py-1 bg-white border border-slate-300 rounded text-xs hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        className="h-9 px-3 bg-transparent text-slate-500 hover:bg-slate-50 hover:text-blue-600 rounded-xl text-xs font-bold disabled:opacity-30 disabled:hover:bg-transparent transition-all active:scale-95 flex items-center gap-1"
                                     >
-                                        Prev
+                                        <Icon icon="mdi:chevron-left" width="18" />
+                                        <span className="hidden sm:inline">Prev</span>
                                     </button>
 
-                                    {/* PAGE NUMBERS */}
-                                    {(() => {
-                                        const currentPage = pagination.current_page;
-                                        const lastPage = pagination.last_page;
-                                        const pages = [];
+                                    {/* DIVIDER Mobile */}
+                                    <div className="md:hidden w-px h-5 bg-slate-200 mx-1"></div>
 
-                                        // Simple sliding window logic
-                                        // Always show first, last, and window around current
-                                        const delta = 1; // Number of pages on each side of current
-                                        const range = [];
-                                        for (let i = Math.max(2, currentPage - delta); i <= Math.min(lastPage - 1, currentPage + delta); i++) {
-                                            range.push(i);
-                                        }
+                                    {/* DESKTOP PAGE NUMBERS */}
+                                    <div className="hidden md:flex gap-1">
+                                        {(() => {
+                                            const currentPage = pagination.current_page;
+                                            const lastPage = pagination.last_page;
+                                            const range = [];
+                                            const delta = 1;
 
-                                        if (currentPage - delta > 2) range.unshift("...");
-                                        if (currentPage + delta < lastPage - 1) range.push("...");
+                                            for (let i = Math.max(2, currentPage - delta); i <= Math.min(lastPage - 1, currentPage + delta); i++) {
+                                                range.push(i);
+                                            }
 
-                                        range.unshift(1);
-                                        if (lastPage > 1) range.push(lastPage);
+                                            if (currentPage - delta > 2) range.unshift("...");
+                                            if (currentPage + delta < lastPage - 1) range.push("...");
 
-                                        return range.map((p, idx) => (
-                                            <button
-                                                key={idx}
-                                                disabled={p === "..."}
-                                                onClick={() => typeof p === 'number' && fetchKunjungan(p)}
-                                                className={`px-3 py-1 rounded text-xs font-bold transition-colors ${p === currentPage
-                                                    ? "bg-blue-600 text-white border border-blue-600"
-                                                    : p === "..."
-                                                        ? "bg-transparent text-slate-400 cursor-default"
-                                                        : "bg-white border border-slate-300 text-slate-600 hover:bg-slate-100"
-                                                    }`}
-                                            >
-                                                {p}
-                                            </button>
-                                        ));
-                                    })()}
+                                            range.unshift(1);
+                                            if (lastPage > 1) range.push(lastPage);
+
+                                            return range.map((p, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    disabled={p === "..."}
+                                                    onClick={() => typeof p === 'number' && fetchKunjungan(p)}
+                                                    className={`w-9 h-9 rounded-xl text-xs font-bold transition-all flex items-center justify-center ${p === currentPage
+                                                        ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-105"
+                                                        : p === "..."
+                                                            ? "bg-transparent text-slate-300 cursor-default"
+                                                            : "bg-slate-50 text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:scale-105"
+                                                        }`}
+                                                >
+                                                    {p}
+                                                </button>
+                                            ));
+                                        })()}
+                                    </div>
+
+                                    {/* MOBILE PAGE INDICATOR */}
+                                    <div className="md:hidden flex items-center justify-center h-9 px-3 bg-slate-50 rounded-lg text-xs font-extra-bold text-slate-700 tracking-wide">
+                                        <span className="text-blue-600 mr-1">{pagination.current_page}</span> / <span className="text-slate-400 ml-1">{pagination.last_page}</span>
+                                    </div>
+
+                                    {/* DIVIDER Mobile */}
+                                    <div className="md:hidden w-px h-5 bg-slate-200 mx-1"></div>
 
                                     {/* NEXT */}
                                     <button
                                         disabled={pagination.current_page === pagination.last_page}
                                         onClick={() => fetchKunjungan(pagination.current_page + 1)}
-                                        className="px-3 py-1 bg-white border border-slate-300 rounded text-xs hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        className="h-9 px-3 bg-transparent text-slate-500 hover:bg-slate-50 hover:text-blue-600 rounded-xl text-xs font-bold disabled:opacity-30 disabled:hover:bg-transparent transition-all active:scale-95 flex items-center gap-1"
                                     >
-                                        Next
+                                        <span className="hidden sm:inline">Next</span>
+                                        <Icon icon="mdi:chevron-right" width="18" />
                                     </button>
                                 </div>
                             </div>
@@ -845,6 +942,7 @@ export default function KunjunganIndex() {
                 </div >
             )
             }
+
         </div >
     );
 }

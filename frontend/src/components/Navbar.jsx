@@ -139,17 +139,17 @@ export default function Navbar() {
               <div className="relative flex items-center">
                 <button
                   onClick={() => setOpenSuara(!openSuara)}
-                  className="flex items-center gap-1 pb-2 font-medium
-                            relative transition
+                  className="flex items-center gap-1 pb-2 font-medium relative transition
                             after:absolute after:left-0 after:-bottom-1
                             after:h-[2px] after:w-full after:origin-left
                             after:scale-x-0 after:bg-white after:transition-transform
-                            hover:after:scale-x-100"
-                >
+                            hover:after:scale-x-100">
                   <span>Suara</span>
                   <Icon
                     icon="mdi:chevron-down"
-                    className="text-lg translate-y-[1px]"
+                    className={`text-lg translate-y-[1px] transition-transform duration-300 ${
+                      openSuara ? "rotate-180" : "rotate-0"
+                    }`}
                   />
                 </button>
 
@@ -189,13 +189,15 @@ export default function Navbar() {
               className="relative p-2 rounded-full hover:bg-blue-800 transition"
               title="Notifikasi"
             >
-              <Icon
-                icon="mdi:bell"
-                width={22}
-                className="text-white"
-              />
+              <div className={`transition-transform origin-top ${unreadCount > 0 ? 'animate-swing' : 'hover:animate-swing'}`}>
+                <Icon
+                  icon="mdi:bell"
+                  width={22}
+                  className="text-white"
+                />
+              </div>
               {unreadCount > 0 && (
-                <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse border border-blue-900">
+                <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse border border-blue-900 shadow-sm">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
@@ -219,13 +221,15 @@ export default function Navbar() {
               className="relative p-1"
               title="Notifikasi"
             >
-              <Icon
-                icon="mdi:bell"
-                width={24}
-                className="text-white"
-              />
+              <div className={`transition-transform origin-top ${unreadCount > 0 ? 'animate-swing' : 'active:animate-swing'}`}>
+                <Icon
+                  icon="mdi:bell"
+                  width={24}
+                  className="text-white"
+                />
+              </div>
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse border border-blue-900">
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse border border-blue-900 shadow-sm">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
@@ -291,15 +295,13 @@ export default function Navbar() {
             </div>
           )}
 
-          {/* ===== USER + LOGOUT ===== */}
+          {/* ===== USER + PROFILE + LOGOUT ===== */}
           <div className="pt-4 border-t border-blue-700 flex items-center justify-between">
 
-            {/* USER INFO */}
+            {/* USER INFO + PROFILE */}
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-white text-blue-900
-                                flex items-center justify-center font-bold">
-                {name?.[0] || "U"}
-              </div>
+              {/* PROFILE COMPONENT */}
+              <Profile />
 
               <div className="text-sm leading-tight">
                 <div className="text-blue-200">Login sebagai</div>

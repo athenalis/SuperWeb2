@@ -289,7 +289,7 @@ onSuccess: (res) => {
                     checkNik(form.nik);
                   }
                 }}
-                className={baseInput}
+                className="w-full text-lg border border-gray-400 pl-5 pr-5 py-3 rounded-lg outline-none transition-all duration-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-600 placeholder:text-gray-400 font-medium"
                 inputMode="numeric"
                 placeholder="Masukkan NIK"
               />
@@ -300,7 +300,7 @@ onSuccess: (res) => {
                 name="nama"
                 value={form.nama}
                 onChange={handleChange}
-                className={baseInput}
+                className="w-full text-lg border border-gray-400 pl-5 pr-5 py-3 rounded-lg outline-none transition-all duration-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-600 placeholder:text-gray-400 font-medium"
               />
             </Field>
           </div>
@@ -316,7 +316,7 @@ onSuccess: (res) => {
                   if (value.length > 14) return;
                   handleChange(e);
                 }}
-                className={baseInput}
+                className="w-full text-lg border border-gray-400 pl-5 pr-5 py-3 rounded-lg outline-none transition-all duration-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-600 placeholder:text-gray-400 font-medium"
                 inputMode="numeric"
                 placeholder="Cth: 0821xxxx, 62821xxxx, +62821xxxx"
               />
@@ -332,7 +332,7 @@ onSuccess: (res) => {
                   if (value.length > 3) return;
                   handleChange(e);
                 }}
-                className={baseInput}
+                className="w-full text-lg border border-gray-400 pl-5 pr-5 py-3 rounded-lg outline-none transition-all duration-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-600 placeholder:text-gray-400 font-medium"
                 inputMode="numeric"
                 placeholder="Cth: 001"
               />
@@ -344,7 +344,7 @@ onSuccess: (res) => {
               name="alamat"
               value={form.alamat}
               onChange={handleChange}
-              className={baseInput}
+              className="w-full text-lg border border-gray-400 pl-5 pr-5 py-3 rounded-lg outline-none transition-all duration-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-600 placeholder:text-gray-400 font-medium"
               placeholder="Masukkan alamat anda"
             />
           </Field>
@@ -371,6 +371,7 @@ onSuccess: (res) => {
               placeholder="Pilih Kota/Kabupaten"
               valueKey="city_code"
               labelKey="city"
+              
             />
   
             <SelectField
@@ -406,14 +407,14 @@ onSuccess: (res) => {
             <button
               type="submit"
               disabled={mutation.isLoading}
-              className="bg-blue-900 hover:bg-blue-800 text-white px-6 py-2 rounded-lg"
+              className="bg-blue-900 hover:bg-blue-800 text-white px-6 py-2 rounded-lg font-bold"
             >
               {mutation.isLoading ? "Menyimpan..." : "Simpan"}
             </button>
             <button
               type="button"
               onClick={() => navigate("/koordinator")}
-              className="bg-white-100 px-6 py-2 rounded-lg text-gray-600 hover:underline"
+              className="bg-white-100 px-6 py-2 rounded-lg text-gray-600 hover:underline font-bold"
             >
               Batal
             </button>
@@ -515,7 +516,7 @@ function SelectField({
           icon="mdi:chevron-down"
           width="22"
           className="absolute right-4 top-1/2 -translate-y-1/2
-                     text-slate-400 pointer-events-none"
+                  text-slate-400 pointer-events-none"
         />
       </div>
     </Field>

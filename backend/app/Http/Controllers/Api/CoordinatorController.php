@@ -32,7 +32,6 @@ public function index(Request $request)
         'village:village_code,village',
     ])->withCount('relawans');
 
-    // Filter pencarian
     if ($request->filled('search')) {
         $keyword = $request->search;
         $query->where(function ($q) use ($keyword) {
@@ -47,12 +46,10 @@ public function index(Request $request)
         });
     }
 
-    // Filter wilayah
     if ($request->filled('city_code')) $query->where('city_code', $request->city_code);
     if ($request->filled('district_code')) $query->where('district_code', $request->district_code);
     if ($request->filled('village_code')) $query->where('village_code', $request->village_code);
 
-    // Tentukan pagination atau ambil semua
     if ($request->filled('per_page')) {
         $perPage = (int) $request->per_page;
         $data = $query->orderByDesc('id')->paginate($perPage);
@@ -159,17 +156,17 @@ public function index(Request $request)
             ]);
 
             $koordinator = Coordinator::create([
-                'user_id'        => $user->id,
-                'province_code'  => $request->province_code,
-                'city_code'      => $request->city_code,
-                'district_code'  => $request->district_code,
-                'village_code'   => $request->village_code,
-                'nama'           => $request->nama,
-                'nik'            => $request->nik,
-                'no_hp'          => $request->no_hp,
-                'alamat'         => $request->alamat,
-                'tps'            => $request->tps,
-                'status'         => 'inactive',
+                'user_id' => $user->id,
+                'province_code' => $request->province_code,
+                'city_code' => $request->city_code,
+                'district_code' => $request->district_code,
+                'village_code' => $request->village_code,
+                'nama' => $request->nama,
+                'nik' => $request->nik,
+                'no_hp' => $request->no_hp,
+                'alamat' => $request->alamat,
+                'tps' => $request->tps,
+                'status' => 'inactive',
             ]);
 
             $koordinator->load(['province', 'city', 'district', 'village']);
@@ -179,8 +176,8 @@ public function index(Request $request)
                 'target_type' => 'koordinator',
                 'target_name' => $koordinator->nama,
                 'meta' => [
-                    'provinsi'  => $koordinator->province->province ?? null,
-                    'kota'      => $koordinator->city->city ?? null,
+                    'provinsi' => $koordinator->province->province ?? null,
+                    'kota' => $koordinator->city->city ?? null,
                     'kecamatan' => $koordinator->district->district ?? null,
                     'kelurahan' => $koordinator->village->village ?? null,
                 ]
@@ -188,8 +185,8 @@ public function index(Request $request)
 
             return [
                 'koordinator' => $koordinator,
-                'email'       => $email,
-                'password'    => $passwordPlain,
+                'email' => $email,
+                'password' => $passwordPlain,
             ];
         });
 
@@ -199,7 +196,7 @@ public function index(Request $request)
             'data' => [
                 'koordinator' => $result['koordinator'],
                 'user' => [
-                    'email'    => $result['email'],
+                    'email' => $result['email'],
                     'password' => $result['password'],
                 ]
             ]
@@ -274,14 +271,14 @@ public function index(Request $request)
 
         $koordinator->update([
             'province_code' => $request->province_code,
-            'city_code'     => $request->city_code,
+            'city_code' => $request->city_code,
             'district_code' => $request->district_code,
-            'village_code'  => $request->village_code,
-            'nama'        => $request->nama,
-            'nik'         => $request->nik,
-            'no_hp'       => $request->no_hp,
-            'alamat'      => $request->alamat,
-            'tps'         => $request->tps,
+            'village_code' => $request->village_code,
+            'nama' => $request->nama,
+            'nik' => $request->nik,
+            'no_hp' => $request->no_hp,
+            'alamat' => $request->alamat,
+            'tps' => $request->tps,
         ]);
 
         if ($koordinator->user) {
@@ -291,10 +288,10 @@ public function index(Request $request)
             $newPasswordPlain = $nameClean . rand(1000, 9999);
 
             $koordinator->user->update([
-                'name'           => $request->nama,
-                'nik'            => $request->nik,
-                'email'          => $newEmail,
-                'password'       => Hash::make($newPasswordPlain),
+                'name' => $request->nama,
+                'nik' => $request->nik,
+                'email' => $newEmail,
+                'password' => Hash::make($newPasswordPlain),
                 'plain_password' => $newPasswordPlain,
             ]);
         }
@@ -304,12 +301,12 @@ public function index(Request $request)
 
             if ($oldValue != $newValue) {
                 ActivityLogger::log([
-                    'action'      => 'UPDATE',
+                    'action' => 'UPDATE',
                     'target_type' => 'koordinator',
                     'target_name' => $koordinator->nama,
-                    'field'       => $field,
-                    'old_value'   => $oldValue,
-                    'new_value'   => $newValue,
+                    'field' => $field,
+                    'old_value' => $oldValue,
+                    'new_value' => $newValue,
                 ]);
             }
         }
@@ -317,7 +314,7 @@ public function index(Request $request)
         if ($koordinator->user) {
             $koordinator->user->update([
                 'name' => $request->nama,
-                'nik'  => $request->nik
+                'nik' => $request->nik
             ]);
         }
 
@@ -327,7 +324,7 @@ public function index(Request $request)
             'data' => [
                 'koordinator' => $koordinator,
                 'user' => [
-                    'email'    => $newEmail,
+                    'email' => $newEmail,
                     'password' => $newPasswordPlain,
                 ]
             ]
@@ -356,13 +353,13 @@ public function destroy($id)
     }
 
     ActivityLogger::log([
-        'action'      => 'DELETE',
+        'action' => 'DELETE',
         'target_type' => 'koordinator',
         'target_name' => $koordinator->nama,
-        'meta'        => [
+        'meta' => [
             'kelurahan' => $koordinator->village->nama ?? null,
             'kecamatan' => $koordinator->district->nama ?? null,
-            'kota'      => $koordinator->city->nama ?? null,
+            'kota' => $koordinator->city->nama ?? null,
         ],
     ]);
 
@@ -391,7 +388,7 @@ public function exportAll(Request $request)
     }
 
     ActivityLogger::log([
-        'action'      => 'EXPORT',
+        'action' => 'EXPORT',
         'target_type' => 'koordinator',
     ]);
 
@@ -418,7 +415,7 @@ public function import(Request $request)
             'message' => 'Import selesai',
             'data' => [
                 'successCount' => $import->successCount,
-                'failed_rows' => $import->failedRows,
+                'failed_rows'=> $import->failedRows,
                 'created_accounts' => $import->createdAccounts,
             ]
         ]);
@@ -449,14 +446,14 @@ public function checkNik(Request $request)
 
     if ($koordinator->trashed()) {
         return response()->json([
-            'exists'  => true,
+            'exists' => true,
             'deleted' => true,
             'message' => 'NIK pernah terdaftar dan saat ini nonaktif',
         ], 200);
     }
 
     return response()->json([
-        'exists'  => true,
+        'exists' => true,
         'deleted' => false,
         'message' => 'NIK sudah terdaftar dan aktif',
     ], 200);
@@ -487,14 +484,14 @@ public function restoreByNik(Request $request)
     $actor = Auth::user();
 
     History::create([
-        'user_id'     => $actor->id,
-        'role'        => $actor->role, // admin
-        'action'      => 'RESTORE',
+        'user_id' => $actor->id,
+        'role' => $actor->role, // admin
+        'action' => 'RESTORE',
         'target_type' => 'koordinator',
         'target_name' => $koordinator->nama,
-        'field'       => 'activate_nik',
-        'old_value'   => 'deleted',
-        'new_value'   => 'active',
+        'field' => 'activate_nik',
+        'old_value' => 'deleted',
+        'new_value' => 'active',
     ]);
 
     return response()->json([
@@ -503,7 +500,7 @@ public function restoreByNik(Request $request)
         'data' => [
             'koordinator' => $koordinator,
             'user' => $koordinator->user ? [
-                'email'    => $koordinator->user->email,
+                'email' => $koordinator->user->email,
                 'password' => $koordinator->user->plain_password,
             ] : null
         ]

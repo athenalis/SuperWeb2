@@ -7,6 +7,31 @@ import api from "../../lib/axios";
 /* =========================
    HELPERS
 ========================= */
+const MAX_BUDGET = 999_999_999_999;
+
+const formatRupiahInput = (value) => {
+  if (!value) return "";
+  const number = Number(value);
+  if (isNaN(number)) return "";
+
+  return number
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+};
+
+const parseRupiahInput = (value, prevValue = "") => {
+  const raw = value.replace(/\D/g, "");
+  if (!raw) return "";
+
+  const num = Number(raw);
+
+  if (num > MAX_BUDGET) {
+    return prevValue;
+  }
+
+  return raw;
+};
+
 const makeInfluencerRow = () => ({
   rowId: `row_${Math.random().toString(16).slice(2)}`,
   influencer_id: "",
@@ -103,41 +128,34 @@ export default function EditContent() {
       .then((res) => {
         const data = res.data.data ?? res.data;
 
-        const platformIds = [];
+        const platformIdsSet = new Set();
         const contentTypeMap = {};
         const links = {};
         const adsMap = {};
 
         (data.content_platforms || []).forEach((cp) => {
-          platformIds.push(cp.platform_id);
-          contentTypeMap[cp.platform_id] = cp.content_type_id;
+          platformIdsSet.add(cp.platform_id);
 
-          if (cp.link) {
-            links[cp.platform_id] = cp.link;
+          if (!contentTypeMap[cp.platform_id]) {
+            contentTypeMap[cp.platform_id] = {};
           }
 
-          if (cp.ads && !cp.ads.deleted_at) {
-            adsMap[cp.platform_id] = {
-              is_ads: true,
-              // FIX: format date agar bisa muncul di input type="date"
-              start_date: cp.ads.start_date ? cp.ads.start_date.slice(0, 10) : "",
-              end_date: cp.ads.end_date ? cp.ads.end_date.slice(0, 10) : "",
-              budget_ads: cp.ads.budget_ads ?? 0,
-            };
-          }
+          contentTypeMap[cp.platform_id][cp.content_type_id] = {
+            is_collaborator: !!cp.is_collaborator,
+          };
         });
 
         setForm({
           title: data.title ?? "",
           posting_date: data.posting_date ? data.posting_date.slice(0, 10) : "", // FIX
-          platform_ids: platformIds,
+          platform_ids: Array.from(platformIdsSet),
           selected_content_by_platform: contentTypeMap,
           budget_content: data.budget_with_trashed?.budget_content ?? "",
           is_ads: Object.keys(adsMap).length > 0,
           ads_by_platform: adsMap, // ads per platform
           description: data.description ?? "",
           status_id: data.status_id ?? "",
-          content_links: links,
+          content_links: {}, //
         });
 
         setPrevStatus(data.status_id ?? null);
@@ -211,40 +229,47 @@ export default function EditContent() {
 ========================= */
   const handleContentPick = (platformId, contentTypeId) => {
     setForm((prev) => {
-      const prevSelected = prev.selected_content_by_platform[platformId] || [];
-      const newSelected = Array.isArray(prevSelected) ? [...prevSelected] : [prevSelected];
+      const prevPlatform = prev.selected_content_by_platform[platformId] || {};
 
-      if (newSelected.includes(contentTypeId)) {
-        // hapus jika sudah ada
-        const idx = newSelected.indexOf(contentTypeId);
-        newSelected.splice(idx, 1);
+      const exists = !!prevPlatform[contentTypeId];
+
+      const nextPlatform = { ...prevPlatform };
+
+      if (exists) {
+        delete nextPlatform[contentTypeId];
       } else {
-        // tambahkan
-        newSelected.push(contentTypeId);
+        nextPlatform[contentTypeId] = {
+          is_collaborator: false,
+        };
       }
 
       return {
         ...prev,
         selected_content_by_platform: {
           ...prev.selected_content_by_platform,
-          [platformId]: newSelected,
+          [platformId]: nextPlatform,
         },
       };
     });
   };
 
+
   /* =========================
      HANDLE LINK CHANGE (optional)
   ========================= */
-  const handleLinkChange = (platformId, value) => {
-    setForm((prev) => ({
-      ...prev,
-      content_links: {
-        ...prev.content_links,
-        [platformId]: value,
+  const handleLinkChange = (platformId, contentTypeId, value) => {
+  setForm((prev) => ({
+    ...prev,
+    content_links: {
+      ...prev.content_links,
+      [platformId]: {
+        ...(prev.content_links?.[platformId] || {}),
+        [contentTypeId]: value,
       },
-    }));
-  };
+    },
+  }));
+};
+
 
   /* =========================
      SUBMIT
@@ -286,10 +311,11 @@ export default function EditContent() {
       title: form.title,
       posting_date: form.posting_date,
       status_id: Number(form.status_id),
+      description: form.description,
       refund_budget: Number(form.status_id) === 5 ? refundBudget : false,
       budget_content: Number(form.budget_content),
       is_ads: form.is_ads,
-      content_type_ids: form.selected_content_by_platform,
+      content_types: form.selected_content_by_platform, 
       links: form.content_links,
       influencer_ids: useInfluencer
         ? influencerRows.map((r) => r.influencer_id).filter(Boolean)
@@ -303,7 +329,7 @@ export default function EditContent() {
       setLoading(true);
       await api.put(`/content-plans/${id}`, payload);
       toast.success("Perubahan berhasil disimpan");
-      navigate("/content");
+      navigate(`/content/${id}`);
     } catch (err) {
       console.error("PUT Error:", err.response?.data || err.message);
       toast.error("Gagal menyimpan perubahan");
@@ -576,34 +602,100 @@ export default function EditContent() {
                 <div className="font-bold mb-3">{platform?.name}</div>
 
                 <div className="grid md:grid-cols-3 gap-3">
-                  {types.map((t) => (
-                    <label
-                      key={t.id}
-                      className={`flex gap-2 border p-3 rounded-lg ${isPosted ? "opacity-50 cursor-not-allowed" : ""
-                        }`}
-                    >
-                      <input
-                        type="checkbox"
-                        disabled={isPosted}
-                        checked={Array.isArray(form.selected_content_by_platform[pid])
-                          ? form.selected_content_by_platform[pid].includes(t.id)
-                          : form.selected_content_by_platform[pid] === t.id
-                        }
-                        onChange={() => handleContentPick(pid, t.id)}
-                      />
-                      {t.name}
-                    </label>
-                  ))}
+                  {types.map((t) => {
+                    const platformName = platform?.name;
+                    const isStory = t.name?.toLowerCase() === "story";
+                    const isX = platformName?.toLowerCase() === "x";
+
+                    const selected =
+                      form.selected_content_by_platform?.[pid]?.[t.id];
+
+                    const canUseCollaborator = selected && !isStory && !isX;
+
+                    return (
+                      <div
+                        key={t.id}
+                        className={`border p-3 rounded-lg space-y-2
+                          ${selected ? "border-blue-600 bg-blue-50" : ""}
+                        `}
+                      >
+                        {/* PILIH KONTEN */}
+                        <label className="flex gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!selected}
+                            disabled={isPosted}
+                            onChange={() => handleContentPick(pid, t.id)}
+                          />
+                          <span>{t.name}</span>
+                        </label>
+
+                        {/* COLLABORATOR */}
+                        {selected && (
+                          <div className="pl-6 text-sm space-y-1">
+                            {canUseCollaborator && (
+                              <label className="flex gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selected.is_collaborator}
+                                  onChange={(e) =>
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      selected_content_by_platform: {
+                                        ...prev.selected_content_by_platform,
+                                        [pid]: {
+                                          ...prev.selected_content_by_platform[pid],
+                                          [t.id]: {
+                                            ...prev.selected_content_by_platform[pid][t.id],
+                                            is_collaborator: e.target.checked,
+                                          },
+                                        },
+                                      },
+                                    }))
+                                  }
+                                />
+                                Aktifkan collaborator
+                              </label>
+                            )}
+
+                            {isStory && (
+                              <div className="text-xs text-red-500">
+                                Story tidak mendukung collaborator
+                              </div>
+                            )}
+
+                            {isX && (
+                              <div className="text-xs text-red-500">
+                                Platform X tidak mendukung collaborator
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
-                {Number(form.status_id) === 4 && (
-                  <input
-                    type="url"
-                    placeholder={`Link ${platform?.name}`}
-                    value={form.content_links?.[pid] || ""}
-                    onChange={(e) => handleLinkChange(pid, e.target.value)}
-                    className={`${baseInput} mt-3`}
-                  />
+                {Number(form.status_id) === 4 &&
+                Object.entries(form.selected_content_by_platform?.[pid] || {}).map(
+                  ([contentTypeId]) => {
+                    const contentType = types.find(
+                      (t) => String(t.id) === String(contentTypeId)
+                    );
+
+                    return (
+                      <input
+                        key={contentTypeId}
+                        type="url"
+                        placeholder={`Link ${platform?.name} - ${contentType?.name}`}
+                        value={form.content_links?.[pid]?.[contentTypeId] || ""}
+                        onChange={(e) =>
+                          handleLinkChange(pid, contentTypeId, e.target.value)
+                        }
+                        className={`${baseInput} mt-3`}
+                      />
+                    );
+                  }
                 )}
               </div>
             );
@@ -694,10 +786,19 @@ export default function EditContent() {
 
         <Field label="Budget Konten" required>
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
             name="budget_content"
-            value={form.budget_content}
-            onChange={handleChange}
+            value={formatRupiahInput(form.budget_content)}
+            onChange={(e) => {
+              setForm((prev) => ({
+                ...prev,
+                budget_content: parseRupiahInput(
+                  e.target.value,
+                  prev.budget_content
+                ),
+              }));
+            }}
             className={baseInput}
             placeholder="Masukkan budget konten"
           />
@@ -839,7 +940,7 @@ export default function EditContent() {
 
           <button
             type="button"
-            onClick={() => navigate("/content")}
+            onClick={() => navigate(`/content/${id}`)}
             className="text-slate-600"
           >
             Batal

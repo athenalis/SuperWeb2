@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../../lib/axios";
 import { Icon } from "@iconify/react";
@@ -73,8 +73,8 @@ const scaleLabels = {
    MAIN COMPONENT
 ========================= */
 const getImageUrl = (path) => {
-  if (!path) return null;
-  const storageUrl = import.meta.env.VITE_STORAGE_URL;
+  if (!path) return "";
+  const storageUrl = import.meta.env.VITE_STORAGE_URL?.replace(/\/$/, "");
   if (storageUrl) return `${storageUrl}/${path}`;
   return `${api.defaults.baseURL.replace('/api', '')}/storage/${path}`;
 };
@@ -104,6 +104,67 @@ export default function KunjunganDetail() {
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Helper to determine if reminder should be shown
+  const showReminder = () => {
+    console.log("=== REMINDER DEBUG ===");
+    console.log("Data:", data);
+    console.log("Role:", role);
+
+    if (!data) {
+      console.log("No data, returning null");
+      return null;
+    }
+
+    console.log("data.status:", data.status);
+    console.log("data.status_verifikasi:", data.status_verifikasi);
+
+    if (role === "koordinator" && data.status_verifikasi === "pending") {
+      console.log("✅ SHOWING KOORDINATOR REMINDER");
+      return {
+        type: "koordinator",
+        icon: "⚠️",
+        title: "Jangan Lupa Verifikasi!",
+        message: "Kunjungan ini masih menunggu verifikasi Anda.",
+        bgColor: "bg-amber-50",
+        borderColor: "border-amber-300",
+        textColor: "text-amber-800"
+      };
+    }
+
+    if (role === "relawan") {
+      if (data.status === "draft") {
+        console.log("✅ SHOWING RELAWAN DRAFT REMINDER");
+        return {
+          type: "relawan-draft",
+          icon: "📝",
+          title: "Masih Draft!",
+          message: "Jangan lupa submit laporan kunjungan ini.",
+          bgColor: "bg-blue-50",
+          borderColor: "border-blue-300",
+          textColor: "text-blue-800"
+        };
+      }
+      if (data.status_verifikasi === "rejected") {
+        console.log("✅ SHOWING RELAWAN REJECTED REMINDER");
+        return {
+          type: "relawan-rejected",
+          icon: "❌",
+          title: "Perlu Perbaikan!",
+          message: "Kunjungan ini ditolak. Silakan perbaiki dan submit kembali.",
+          bgColor: "bg-red-50",
+          borderColor: "border-red-300",
+          textColor: "text-red-800"
+        };
+      }
+    }
+
+    console.log("❌ No reminder condition met");
+    return null;
+  };
+
+  const reminder = showReminder();
+  console.log("Final reminder object:", reminder);
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-20">
@@ -159,6 +220,20 @@ export default function KunjunganDetail() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4 md:space-y-6 pb-20 px-3 md:px-4">
+
+      {/* STICKY REMINDER BANNER */}
+      {reminder && (
+        <div className={`${reminder.bgColor} ${reminder.textColor} border-2 ${reminder.borderColor} rounded-xl p-4 sticky top-20 z-40 shadow-lg animate-pulse`}>
+          <div className="flex items-start gap-3">
+            <span className="text-3xl">{reminder.icon}</span>
+            <div className="flex-1">
+              <h3 className="font-bold text-lg mb-1">{reminder.title}</h3>
+              <p className="text-sm opacity-90">{reminder.message}</p>
+            </div>
+            <Icon icon="mdi:information" className="shrink-0" width="24" />
+          </div>
+        </div>
+      )}
 
       {/* HEADER */}
       <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-3 md:p-6">
@@ -338,16 +413,28 @@ export default function KunjunganDetail() {
               Dokumentasi KTP
             </h3>
             {data.foto_ktp ? (
-              <div className="rounded-lg md:rounded-xl overflow-hidden border shadow-inner">
-                <img
-                  src={`http://192.168.1.24:9000/storage/${data.foto_ktp}`}
-                  alt="KTP Head Of Family"
-                  className="w-full h-auto object-contain bg-slate-100 min-h-[150px] md:min-h-[200px]"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = "https://placehold.co/400x250?text=Foto+KTP";
-                  }}
-                />
+              <div className="relative">
+                {/* Card-style border frame */}
+                <div className="border-4 border-blue-900 rounded-2xl p-2 bg-gradient-to-br from-slate-50 to-slate-100 shadow-2xl">
+                  <div className="rounded-xl overflow-hidden border-2 border-slate-300 shadow-lg">
+                    <img
+                      src={getImageUrl(data.foto_ktp)}
+                      alt="KTP Head Of Family"
+                      className="w-full h-auto object-contain bg-white cursor-pointer hover:opacity-90 transition-opacity"
+                      style={{ minHeight: '250px', maxHeight: '450px' }}
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = "https://placehold.co/600x400?text=Foto+KTP";
+                      }}
+                      onClick={() => window.open(getImageUrl(data.foto_ktp), '_blank')}
+                      title="Klik untuk memperbesar"
+                    />
+                  </div>
+                </div>
+                {/* Hint text */}
+                <p className="text-center text-xs text-slate-500 mt-2 italic">
+                  💡 Klik foto untuk memperbesar
+                </p>
               </div>
             ) : (
               <div className="bg-slate-100 aspect-video rounded-lg md:rounded-xl flex items-center justify-center text-slate-400 italic text-xs md:text-sm">

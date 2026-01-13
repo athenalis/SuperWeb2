@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class InfluencerPlatform extends Model
 {
     protected $table = 'influencer_platforms';
+    public $timestamps = false;
 
     protected $fillable = [
         'influencer_id',
@@ -15,13 +16,11 @@ class InfluencerPlatform extends Model
         'followers',
     ];
 
-    // RELASI: platform
     public function platform()
     {
         return $this->belongsTo(Platform::class, 'platform_id');
     }
 
-    // RELASI: influencer
     public function influencer()
     {
         return $this->belongsTo(Influencer::class, 'influencer_id');

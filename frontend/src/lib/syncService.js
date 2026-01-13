@@ -36,6 +36,9 @@ export const syncService = {
         if (failCount > 0) {
             toast.error(`Gagal sinkronisasi ${failCount} data. Akan dicoba lagi nanti.`);
         }
+
+        // Trigger UI Refresh globally
+        window.dispatchEvent(new Event('sync-complete'));
     },
 
     async uploadVisit(visit) {
