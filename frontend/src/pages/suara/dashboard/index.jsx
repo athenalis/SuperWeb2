@@ -58,9 +58,6 @@ export default function PageSuaraDashboard() {
         <h1 className="text-3xl font-bold text-blue-900">
           Analisis Data Suara
         </h1>
-        <p className="text-md text-gray-500">
-          Pilih paslon untuk melihat analisis data 
-        </p>
       </div>
 
       {activeFilter === null && (

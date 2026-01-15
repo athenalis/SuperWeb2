@@ -181,7 +181,7 @@ function PlatformContentCard({ group }) {
 
         {/* ADS */}
         <div className="sm:pl-4 sm:border-l">
-          <div className="text-xs text-slate-500 mb-0.5">Durasi Iklan</div>
+          <div className="text-xs text-slate-500 mb-0.5">Rentang Iklan</div>
 
           {ads ? (
             <div className="space-y-1">
@@ -221,7 +221,11 @@ export default function DetailContent() {
     setLoading(true);
     api
       .get(`/content-plans/${id}`)
-      .then((res) => setData(res.data))
+      .then((res) => {
+        const data = res.data.data || res.data;
+        console.log("Detail Data Loaded:", data);
+        setData(data);
+      })
       .catch(() => setError("Gagal memuat detail konten"))
       .finally(() => setLoading(false));
   }, [id]);
@@ -260,12 +264,17 @@ export default function DetailContent() {
   ========================= */
   const budgetContent = Number(data.budget_with_trashed?.budget_content ?? 0);
 
-  const budgetAds = data.content_platforms?.reduce(
-    (sum, cp) => sum + Number(cp.ads?.budget_ads ?? 0),
+  const budgetAds = (data.ads || []).reduce(
+    (sum, ad) => sum + Number(ad.budget_ads ?? 0),
     0
   );
 
   const totalBudget = budgetContent + budgetAds;
+
+  const adsByPlatform = (data.ads || []).reduce((acc, ad) => {
+    acc[ad.platform_id] = ad;
+    return acc;
+  }, {});
 
   /* =========================
      GROUP PLATFORM & CONTENT (DIGABUNG)
@@ -277,16 +286,12 @@ export default function DetailContent() {
     if (!acc[pid]) {
       acc[pid] = {
         platform: cp.platform,
-        ads: cp.ads || null, // ads 1 per platform
+        ads: adsByPlatform[pid] || null,   // 🔥 FIX
         contents: [],
       };
     }
 
     acc[pid].contents.push(cp);
-
-    // kalau ada ads di item lain tapi sebelumnya null, isi
-    if (!acc[pid].ads && cp.ads) acc[pid].ads = cp.ads;
-
     return acc;
   }, {});
 
@@ -358,9 +363,8 @@ export default function DetailContent() {
             label="Status"
             value={
               <span
-                className={`inline-block px-4 py-1.5 rounded-full text-sm font-semibold ${
-                  statusStyle[data.status?.label] || "bg-slate-100 text-slate-700"
-                }`}
+                className={`inline-block px-4 py-1.5 rounded-full text-sm font-semibold ${statusStyle[data.status?.label] || "bg-slate-100 text-slate-700"
+                  }`}
               >
                 {data.status?.label || "-"}
               </span>
@@ -398,7 +402,7 @@ export default function DetailContent() {
           <Field label="Total Anggaran Iklan" value={formatRupiah(budgetAds)} />
         </Grid>
       </Section>
-    
+
 
       {/* INFLUENCER */}
       {data.influencers?.length > 0 && (
@@ -412,10 +416,10 @@ export default function DetailContent() {
                 >
                   Influencer {idx + 1}: {inf.name}
                 </div>
-                      <p className="text-sm text-slate-500 mb-3">
-                        Influencer digunakan untuk membantu distribusi atau kolaborasi konten
-                        sesuai platform yang dipilih.
-                      </p>
+                <p className="text-sm text-slate-500 mb-3">
+                  Influencer digunakan untuk membantu distribusi atau kolaborasi konten
+                  sesuai platform yang dipilih.
+                </p>
 
                 {/* PLATFORM & FOLLOWERS */}
                 <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
@@ -429,13 +433,12 @@ export default function DetailContent() {
                         key={p.id}
                         className={`
                             flex justify-between items-center border rounded-lg px-4 py-3
-                            ${
-                              isFirstRow
-                                ? "md:col-span-2"
-                                : isFirstItemSecondRow
-                                ? "md:col-span-3 md:col-start-1"
-                                : "md:col-span-3"
-                            }
+                            ${isFirstRow
+                            ? "md:col-span-2"
+                            : isFirstItemSecondRow
+                              ? "md:col-span-3 md:col-start-1"
+                              : "md:col-span-3"
+                          }
                           `}
                       >
                         {/* LEFT: ICON + NAME */}

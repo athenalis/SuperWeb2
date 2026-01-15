@@ -23,9 +23,9 @@ const createPushPinIconActive = (color, extraClass = "") =>
     className: "", // jangan diisi
   })
 
-  const createPushPinIcon = (color = "#ffffffff") =>
-    L.divIcon({
-      html: `
+const createPushPinIcon = (color = "#ffffffff") =>
+  L.divIcon({
+    html: `
         <div style="
           display: flex;
           align-items: center;
@@ -41,10 +41,10 @@ const createPushPinIconActive = (color, extraClass = "") =>
           </svg>
         </div>
       `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 32], // ujung pin ke titik
-      className: "",
-    }) 
+    iconSize: [32, 32],
+    iconAnchor: [16, 32], // ujung pin ke titik
+    className: "",
+  })
 
 const pushPinIcon = createPushPinIcon("rgba(0, 64, 240, 1)")
 const pushPinIconActive = createPushPinIconActive("#ffffff", "pin-active")
@@ -78,6 +78,18 @@ const normalizeVillage = (value = "") => {
   return map[key] ?? raw
 }
 
+const getOffsetPosition = (center, index, total) => {
+  if (total === 1) return center
+
+  const radius = 0.00035 // jarak offset (AMAN untuk zoom 12)
+  const angle = (index / total) * Math.PI * 2
+
+  return [
+    center[0] + radius * Math.sin(angle),
+    center[1] + radius * Math.cos(angle),
+  ]
+}
+
 /* ================= COMPONENT ================= */
 export default function VisitMap({ visits }) {
   const [villages, setVillages] = useState(null)
@@ -91,14 +103,14 @@ export default function VisitMap({ visits }) {
   useEffect(() => {
     Object.entries(markerRefs.current).forEach(([key, marker]) => {
       if (!marker) return
-  
+
       if (key === activeVillage || key === hoverVillage) {
         marker.openTooltip()
       } else {
         marker.closeTooltip()
       }
     })
-  }, [activeVillage, hoverVillage])  
+  }, [activeVillage, hoverVillage])
 
 
   useEffect(() => {
@@ -125,10 +137,10 @@ export default function VisitMap({ visits }) {
   /* ================= STYLE (SINGLE SOURCE OF TRUTH) ================= */
   const villageStyle = (feature) => {
     const name = normalizeVillage(feature.properties.village)
-  
+
     const isActive = name === activeVillage
     const isHover = name === hoverVillage && !activeVillage
-  
+
     return {
       color: "#ffffff",
       weight: isActive || isHover ? 2 : 0,
@@ -138,25 +150,25 @@ export default function VisitMap({ visits }) {
         isActive
           ? ACTIVE_FILL_OPACITY
           : isHover
-          ? ACTIVE_FILL_OPACITY
-          : BASE_FILL_OPACITY,
+            ? ACTIVE_FILL_OPACITY
+            : BASE_FILL_OPACITY,
     }
-  }  
+  }
 
   const onEachVillage = (feature, layer) => {
     const name = normalizeVillage(feature.properties.village)
-  
+
     layer.on({
       mouseover: () => {
         if (name === activeVillage) return
         setHoverVillage(name)
       },
-  
+
       mouseout: () => {
         if (name === activeVillage) return
         setHoverVillage(null)
       },
-  
+
       click: () => {
         if (isDraggingRef.current) return
 
@@ -164,9 +176,26 @@ export default function VisitMap({ visits }) {
         setHoverVillage(null)
       },
     })
-  }  
+  }
 
   if (!villages) return null
+  
+  const uniqueVisits = Object.values(
+    visits.reduce((acc, v) => {
+      const key = `${v.village_code}-${v.koordinator_id}`
+      acc[key] = v
+      return acc
+    }, {})
+  )
+
+  const visitsByVillage = uniqueVisits.reduce((acc, v) => {
+    const key = normalizeVillage(v.village_name)
+    if (!acc[key]) acc[key] = []
+    acc[key].push(v)
+    return acc
+  }, {})
+
+
 
   return (
     <MapContainer
@@ -178,21 +207,21 @@ export default function VisitMap({ visits }) {
           touchStartRef.current = e.touches?.[0] || null
           isDraggingRef.current = false
         })
-    
+
         map.on("touchmove", (e) => {
           if (!touchStartRef.current) return
           const t = e.touches?.[0]
           if (!t) return
-    
+
           const dx = Math.abs(t.clientX - touchStartRef.current.clientX)
           const dy = Math.abs(t.clientY - touchStartRef.current.clientY)
-    
+
           // threshold drag (PIXEL BASED, BUKAN TIME)
           if (dx > 6 || dy > 6) {
             isDraggingRef.current = true
           }
         })
-    
+
         map.on("touchend", () => {
           // JANGAN reset langsung
           setTimeout(() => {
@@ -213,78 +242,88 @@ export default function VisitMap({ visits }) {
       />
 
       {/* ===== MARKER + TOOLTIP ===== */}
-      {visits.map(v => {
-        const center = getVillageCenter(v.village_name)
-        if (!center) return null
+      {Object.entries(visitsByVillage).flatMap(([villageName, villageVisits]) => {
+        const center = getVillageCenter(villageName)
+        if (!center) return []
 
-        const name = normalizeVillage(v.village_name)
+        return villageVisits.map((v, idx) => {
+          const position = getOffsetPosition(
+            center,
+            idx,
+            villageVisits.length
+          )
 
-        return (
-          <Marker
-            ref={ref => {
-              if (ref) markerRefs.current[name] = ref
-            }}
-            key={v.village_code}
-            position={center}
-            icon={activeVillage === name ? pushPinIconActive : pushPinIcon}
-            eventHandlers={{
-              mouseover: () => {
-                if (name === activeVillage) return
-                setHoverVillage(name)
-              },
-              mouseout: () => {
-                if (name === activeVillage) return
-                setHoverVillage(null)
-              },
-              click: () => {
-                if (isDraggingRef.current) return
+          const name = normalizeVillage(v.village_name)
+          const markerKey = `${v.village_code}-${v.koordinator_id}`
 
-                setActiveVillage(prev => (prev === name ? null : name))
-                setHoverVillage(null)
-              },
-            }}
-            
-          >
-            <Tooltip
-              direction="top"
-              offset={[0, -25]}
-              opacity={1}
-              className="visit-tooltip"
-              sticky={false}
-              interactive={false}
-              permanent={activeVillage === name || hoverVillage === name}
+          return (
+            <Marker
+              key={markerKey}
+              position={position}
+              icon={activeVillage === name ? pushPinIconActive : pushPinIcon}
+              eventHandlers={{
+                mouseover: () => {
+                  if (name === activeVillage) return
+                  setHoverVillage(name)
+                },
+                mouseout: () => {
+                  if (name === activeVillage) return
+                  setHoverVillage(null)
+                },
+                click: () => {
+                  if (isDraggingRef.current) return
+                  setActiveVillage(prev => (prev === name ? null : name))
+                  setHoverVillage(null)
+                },
+              }}
             >
-              <div className="bg-white rounded-lg shadow-lg px-4 py-3 min-w-[220px] text-sm">
-                <div className="text-xs text-slate-500 uppercase mb-1">
-                  Kelurahan
-                </div>
-                <div className="font-semibold text-slate-800 mb-3">
-                  {v.village_name}
-                </div>
+              <Tooltip
+                direction="top"
+                offset={[0, -25]}
+                opacity={1}
+                className="visit-tooltip"
+                permanent={activeVillage === name || hoverVillage === name}
+              >
+                <div className="bg-white rounded-lg shadow-lg px-4 py-3 min-w-[220px] text-sm">
+                  <div className="text-xs text-slate-500 uppercase mb-1">
+                    Kelurahan
+                  </div>
+                  <div className="font-semibold text-slate-800 mb-2">
+                    {v.village_name}
+                  </div>
 
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Total Kunjungan</span>
-                    <span className="font-semibold">{v.total_kunjungan}</span>
+                  <div className="text-xs text-slate-500 mb-2">
+                    Koordinator
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Completed</span>
-                    <span className="text-green-600">{v.completed}</span>
+                  <div className="font-medium mb-3">
+                    {v.koordinator_name ?? "—"}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Pending</span>
-                    <span className="text-yellow-600">{v.pending}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Rejected</span>
-                    <span className="text-red-600">{v.rejected}</span>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span>Total</span>
+                      <span className="font-semibold">{v.total_kunjungan}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Completed</span>
+                      <span className="text-green-600">{v.completed}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Pending</span>
+                      <span className="text-yellow-600">{v.pending}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Rejected</span>
+                      <span className="text-red-600">{v.rejected}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Tooltip>
-          </Marker>
-        )
+              </Tooltip>
+            </Marker>
+          )
+        })
       })}
+
     </MapContainer>
   )
 }

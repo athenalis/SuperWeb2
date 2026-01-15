@@ -10,15 +10,50 @@ use Illuminate\Support\Facades\DB;
 
 class InfluencerController extends Controller
 {
-    /**
-     * GET /api/influencers
-     * Optional query param: platform_ids[]=1&platform_ids[]=2
-     */
+    private const PLATFORM_CODE_TO_NAME = [
+        'ig' => 'Instagram',
+        'yt' => 'YouTube',
+        'tt' => 'TikTok',
+        'fb' => 'Facebook',
+        'x'  => 'X',
+    ];
+
+    private function normalizeContactsInput($contacts)
+    {
+        if (is_string($contacts)) {
+            $contacts = array_map('trim', explode(',', $contacts));
+        }
+
+        if (!is_array($contacts)) {
+            return [];
+        }
+
+        return array_values(array_filter($contacts));
+    }
+
     public function index(Request $request)
     {
         $platformIds = $request->input('platform_ids', []);
+        $search = $request->input('search');
+        $perPage = $request->input('per_page', 5);
 
-        $query = Influencer::query()->with(['platforms.platform']);
+        $query = Influencer::with(['platforms.platform']);
+        
+        $platform = $request->input('platform');
+
+        if ($platform) {
+            $query->whereHas('platforms.platform', function ($q) use ($platform) {
+                $q->where('name', $platform);
+            });
+        }
+
+        if ($platform && isset(self::PLATFORM_CODE_TO_NAME[$platform])) {
+            $platformName = self::PLATFORM_CODE_TO_NAME[$platform];
+
+            $query->whereHas('platforms.platform', function ($q) use ($platformName) {
+                $q->where('name', $platformName);
+            });
+        }
 
         if (!empty($platformIds)) {
             $query->whereHas('platforms', function ($q) use ($platformIds) {
@@ -26,12 +61,23 @@ class InfluencerController extends Controller
             });
         }
 
-        $influencers = $query->get()->map(function ($influencer) {
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhereHas('platforms', function ($p) use ($search) {
+                        $p->where('username', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $influencers = $query->paginate($perPage);
+
+        $influencers->getCollection()->transform(function ($influencer) {
             return [
                 'id' => $influencer->id,
                 'name' => $influencer->name,
                 'email' => $influencer->email,
-                'contacts' => $influencer->contacts, // JSON array
+                'contacts' => $influencer->contacts,
                 'platforms' => $influencer->platforms->map(function ($p) {
                     return [
                         'id' => $p->platform_id,
@@ -65,12 +111,18 @@ class InfluencerController extends Controller
 
     public function store(Request $request)
     {
+        if ($request->has('contacts')) {
+            $request->merge([
+                'contacts' => $this->normalizeContactsInput($request->contacts),
+            ]);
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
 
             'email' => 'nullable|email|max:255|required_without:contacts',
             'contacts' => 'nullable|array|required_without:email',
-            'contacts.*' => 'string|max:20',
+            'contacts.*' => 'string|max:25',
 
             'platforms' => 'required|array|min:1',
             'platforms.*.platform_id' => 'required|exists:platforms,id',
@@ -127,7 +179,6 @@ class InfluencerController extends Controller
                 'message' => 'Influencer berhasil ditambahkan',
                 'data' => $influencer->load('platforms.platform'),
             ], 201);
-
         } catch (\Throwable $e) {
             DB::rollBack();
             return response()->json([
@@ -139,6 +190,11 @@ class InfluencerController extends Controller
 
     public function update(Request $request, $id)
     {
+        if ($request->has('contacts')) {
+            $request->merge([
+                'contacts' => $this->normalizeContactsInput($request->contacts),
+            ]);
+        }
         $influencer = Influencer::with('platforms')->findOrFail($id);
 
         $validated = $request->validate([
@@ -146,7 +202,7 @@ class InfluencerController extends Controller
 
             'email' => 'nullable|email|max:255|required_without:contacts',
             'contacts' => 'nullable|array|required_without:email',
-            'contacts.*' => 'string|max:20',
+            'contacts.*' => 'string|max:25',
 
             'platforms' => 'required|array|min:1',
             'platforms.*.platform_id' => 'required|exists:platforms,id',
@@ -210,7 +266,6 @@ class InfluencerController extends Controller
                 'message' => 'Influencer berhasil diperbarui',
                 'data' => $influencer->load('platforms.platform'),
             ]);
-
         } catch (\Throwable $e) {
             DB::rollBack();
 
@@ -220,5 +275,52 @@ class InfluencerController extends Controller
             ], 500);
         }
     }
+    public function all(Request $request)
+    {
+        $platformIds = $request->input('platform_ids', []);
+        $search = $request->input('search');
 
+        $query = Influencer::with(['platforms.platform']);
+
+        if (!empty($platformIds)) {
+            $query->whereHas('platforms', function ($q) use ($platformIds) {
+                $q->whereIn('platform_id', $platformIds);
+            });
+        }
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhereHas('platforms', function ($p) use ($search) {
+                        $p->where('username', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $influencers = $query->get();
+
+        $influencers = $influencers->map(function ($influencer) {
+            return [
+                'id' => $influencer->id,
+                'name' => $influencer->name,
+                'email' => $influencer->email,
+                'contacts' => $influencer->contacts,
+                'platforms' => $influencer->platforms->map(function ($p) {
+                    return [
+                        'id' => $p->platform_id,
+                        'name' => $p->platform->name,
+                        'username' => $p->username,
+                        'followers' => $p->followers,
+                    ];
+                }),
+                'display_name' => $this->makeDisplayName($influencer),
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'total' => $influencers->count(),
+            'data' => $influencers
+        ]);
+    }
 }

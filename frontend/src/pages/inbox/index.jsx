@@ -35,12 +35,66 @@ const AlertModal = ({ isOpen, onClose, message, title = "Alert" }) => {
   );
 };
 
+// === CONFIRM DELETE MODAL ===
+// === CONFIRM DELETE MODAL (MATCH DESIGN) ===
+const ConfirmDeleteModal = ({ isOpen, onClose, onConfirm }) => {
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl px-6 py-5 z-10 animate-in fade-in zoom-in duration-200">
+        {/* Title */}
+        <h3 className="text-2xl font-bold text-blue-900 mb-2">
+          Hapus Notifikasi
+        </h3>
+
+        {/* Description */}
+        <p className="text-lg text-slate-500 leading-relaxed mb-6">
+          Apakah Anda yakin ingin menghapus notifikasi ini?
+        </p>
+
+        {/* Actions */}
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 font-medium hover:bg-slate-100 transition"
+          >
+            Batal
+          </button>
+
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-lg bg-blue-900 text-white font-medium hover:bg-blue-700 transition"
+          >
+            Hapus
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.getElementById("modal-root") || document.body
+  );
+};
+
+
 export default function InboxIndex() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [pendingVerifications, setPendingVerifications] = useState([]); // New state for reminder
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Get role from localStorage - same way as Navbar
   const role = localStorage.getItem("role") || "";
@@ -74,32 +128,50 @@ export default function InboxIndex() {
     }
   };
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (isLoadMore = false) => {
     // Safety timeout to ensure loading doesn't stick
-    const timeout = setTimeout(() => setLoading(false), 5000);
+    const timeout = setTimeout(() => isLoadMore ? setLoadingMore(false) : setLoading(false), 5000);
 
     try {
-      // Note: loading is initialized to true, so no need to set it here for initial load.
-      // For manual refreshes, we might want it, but for now let's rely on background refresh.
+      const pageToFetch = isLoadMore ? page + 1 : 1;
 
-      const res = await api.get("/notifications");
+      const res = await api.get(`/notifications?page=${pageToFetch}`);
       clearTimeout(timeout); // Clear timeout if successful response received
 
       if (res.data.success) {
-        const list = res.data.data?.data || [];
-        setNotifications(list);
+        const newData = res.data.data?.data || [];
+        const isLastPage = res.data.data?.next_page_url === null;
 
-        // Auto-select first batch notification if available
-        const firstBatch = list.find(n => n.data?.type === 'verification_batch' && !n.read_at);
-        if (firstBatch && !selectedNotification) {
-          setSelectedNotification(firstBatch);
+        if (isLoadMore) {
+          setNotifications(prev => [...prev, ...newData]);
+          setPage(pageToFetch);
+        } else {
+          setNotifications(newData);
+          setPage(1);
+
+          // Auto-select first batch notification if available (only on fresh load)
+          const firstBatch = newData.find(n => n.data?.type === 'verification_batch' && !n.read_at);
+          if (firstBatch && !selectedNotification) {
+            setSelectedNotification(firstBatch);
+          }
         }
+
+        setHasMore(!isLastPage);
       }
     } catch (err) {
       console.error("Failed to fetch notifications", err);
     } finally {
-      setLoading(false);
+      if (isLoadMore) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
+  };
+
+  const handleLoadMore = () => {
+    setLoadingMore(true);
+    fetchNotifications(true);
   };
 
   const handleReadAll = async () => {
@@ -107,7 +179,8 @@ export default function InboxIndex() {
     setNotifications(prev => prev.map(n => ({ ...n, read_at: new Date().toISOString() })));
     try {
       await api.post("/notifications/read-all");
-      fetchNotifications();
+      // Don't refetch entirely, just keep current state as read
+      // fetchNotifications(); 
       // Trigger navbar refresh
       window.dispatchEvent(new Event('notification-read'));
     } catch (err) {
@@ -198,7 +271,8 @@ export default function InboxIndex() {
     }
 
     // Refresh notifications without blocking UI
-    fetchNotifications();
+    // Reset to page 1 for fresh data
+    fetchNotifications(false);
     // if (role === 'koordinator') fetchPendingVerifications();
   };
 
@@ -217,33 +291,16 @@ export default function InboxIndex() {
   useEffect(() => {
     fetchNotifications();
 
-    // Auto-refresh notifications every 10 seconds (Real-time simulation)
+    // Auto-refresh notifications every 60 seconds (Reduced frequency)
     const interval = setInterval(() => {
-      // Silent refresh - don't show loading
-      const fetchSilent = async () => {
-        try {
-          const res = await api.get("/notifications");
-          if (res.data.success) {
-            const list = res.data.data?.data || [];
-            // Check for new deleted notifications to verify instant popup
-            const hasNewDeleted = list.some(n => n.data?.type === 'visit_deleted' && !n.read_at);
-            if (hasNewDeleted) {
-              // Determine if we need to force update or if state update will handle it
-            }
-            setNotifications(list);
-          }
-        } catch (err) {
-          // Ignore network errors/aborted requests during silent refresh to avoid console noise
-          if (err.code !== 'ERR_NETWORK' && err.code !== 'ECONNABORTED' && !api.isCancel(err)) {
-            console.error("Silent refresh failed", err);
-          }
-        }
-      };
-      fetchSilent();
-    }, 10000); // 10 seconds interval
+      // Silent refresh - ONLY if on page 1 to avoid disrupting scroll/pagination
+      if (page === 1) {
+        fetchNotifications();
+      }
+    }, 60000); // 60 seconds interval
 
     return () => clearInterval(interval);
-  }, []);
+  }, []); // Only runs on mount
 
   // === HARDWARE BACK BUTTON SUPPORT ===
   useEffect(() => {
@@ -272,6 +329,29 @@ export default function InboxIndex() {
         onClose={handleDismissDeleted}
         title="Kunjungan Dihapus"
         message={currentDeletedNotif?.data?.message || "Sebuah data kunjungan telah dihapus oleh Relawan."}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          const notif = deleteTarget;
+          setDeleteTarget(null);
+
+          // Optimistic UI
+          setNotifications(prev => prev.filter(n => n.id !== notif.id));
+          if (selectedNotification?.id === notif.id) {
+            setSelectedNotification(null);
+          }
+
+          try {
+            await api.delete(`/notifications/${notif.id}`);
+          } catch (err) {
+            console.error("Failed to delete notification", err);
+            toast.error("Gagal menghapus pesan");
+            fetchNotifications(); // rollback
+          }
+        }}
       />
 
       {/* LEFT SIDEBAR: LIST */}
@@ -303,78 +383,93 @@ export default function InboxIndex() {
               <p className="text-sm">Tidak ada pesan</p>
             </div>
           ) : (
-            listNotifications.map(notif => (
-              <div
-                key={notif.id}
-                onClick={() => handleNotificationClick(notif)}
-                className={`p-3 rounded-lg cursor-pointer transition-all border ${selectedNotification?.id === notif.id
-                  ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-300'
-                  : notif.read_at
-                    ? 'bg-white border-transparent hover:bg-slate-50'
-                    : 'bg-white border-l-4 border-l-blue-500 shadow-sm border-t-slate-100 border-r-slate-100 border-b-slate-100 font-medium'
-                  }`}
-              >
-                <div className="flex justify-between items-start mb-1">
-                  <div className="flex items-center gap-2">
-                    {(() => {
-                      const type = notif.data?.type;
-                      let badgeClass = 'bg-slate-50 text-slate-600 border-slate-200';
-                      let iconName = 'mdi:bell';
-                      let label = 'Sistem';
+            <>
+              {listNotifications.map(notif => (
+                <div
+                  key={notif.id}
+                  onClick={() => handleNotificationClick(notif)}
+                  className={`p-3 rounded-lg cursor-pointer transition-all border ${selectedNotification?.id === notif.id
+                    ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-300'
+                    : notif.read_at
+                      ? 'bg-white border-transparent hover:bg-slate-50'
+                      : 'bg-white border-l-4 border-l-blue-500 shadow-sm border-t-slate-100 border-r-slate-100 border-b-slate-100 font-medium'
+                    }`}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const type = notif.data?.type;
+                        let badgeClass = 'bg-slate-50 text-slate-600 border-slate-200';
+                        let iconName = 'mdi:bell';
+                        let label = 'Sistem';
 
-                      if (type === 'verification_batch') {
-                        badgeClass = 'bg-indigo-50 text-indigo-700 border-indigo-200';
-                        iconName = 'mdi:buffer';
-                        label = 'Perlu Verifikasi';
-                      } else if (type === 'visit_updated') {
-                        badgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
-                        iconName = 'mdi:pencil-circle';
-                        label = 'Revisi Selesai';
-                      } else if (type === 'new_visit') {
-                        badgeClass = 'bg-green-50 text-green-700 border-green-200';
-                        iconName = 'mdi:plus-circle';
-                        label = 'Kunjungan Baru';
-                      } else if (type === 'visit_deleted') {
-                        badgeClass = 'bg-red-50 text-red-700 border-red-200';
-                        iconName = 'mdi:trash-can';
-                        label = 'Kunjungan Dihapus';
-                      }
+                        if (type === 'verification_batch') {
+                          badgeClass = 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                          iconName = 'mdi:buffer';
+                          label = 'Perlu Verifikasi';
+                        } else if (type === 'visit_updated') {
+                          badgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
+                          iconName = 'mdi:pencil-circle';
+                          label = 'Revisi Selesai';
+                        } else if (type === 'new_visit') {
+                          badgeClass = 'bg-green-50 text-green-700 border-green-200';
+                          iconName = 'mdi:plus-circle';
+                          label = 'Kunjungan Baru';
+                        } else if (type === 'visit_deleted') {
+                          badgeClass = 'bg-red-50 text-red-700 border-red-200';
+                          iconName = 'mdi:trash-can';
+                          label = 'Kunjungan Dihapus';
+                        }
 
-                      return (
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 border shadow-sm ${badgeClass}`}>
-                          <Icon icon={iconName} width={14} />
-                          {label}
-                        </span>
-                      );
-                    })()}
+                        return (
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 border shadow-sm ${badgeClass}`}>
+                            <Icon icon={iconName} width={14} />
+                            {label}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400">{formatDate(notif.created_at)}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget(notif);
+                        }}
+                        className="text-slate-400 hover:text-red-500 transition-colors p-1 -mr-1 rounded-full hover:bg-red-50"
+                        title="Hapus Pesan"
+                      >
+                        <Icon icon="mdi:close-thick" width={16} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-400">{formatDate(notif.created_at)}</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Optimistic delete
-                        setNotifications(prev => prev.filter(n => n.id !== notif.id));
-                        if (selectedNotification?.id === notif.id) setSelectedNotification(null);
-
-                        api.delete(`/notifications/${notif.id}`).catch(err => {
-                          console.error("Failed to delete notification", err);
-                          toast.error("Gagal menghapus pesan");
-                          fetchNotifications(); // Revert on error
-                        });
-                      }}
-                      className="text-slate-400 hover:text-red-500 transition-colors p-1 -mr-1 rounded-full hover:bg-red-50"
-                      title="Hapus Pesan"
-                    >
-                      <Icon icon="mdi:close-thick" width={16} />
-                    </button>
-                  </div>
+                  <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed">
+                    {notif.data?.message || '-'}
+                  </p>
                 </div>
-                <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed">
-                  {notif.data?.message || '-'}
-                </p>
-              </div>
-            ))
+              ))}
+
+              {/* Load More Button */}
+              {hasMore && (
+                <button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="w-full py-3 text-sm text-blue-600 font-medium hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Icon icon="svg-spinners:180-ring-with-bg" width="16" />
+                      Memuat...
+                    </>
+                  ) : (
+                    <>
+                      <Icon icon="mdi:chevron-down" />
+                      Muat Lebih Banyak
+                    </>
+                  )}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -147,30 +147,39 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     // social media (content)
     Route::prefix('content-plans')->group(function () {
         Route::get('/', [ContentPlanController::class, 'index']);
+        Route::get('/summary', [ContentPlanController::class, 'contentSummary']);
         Route::get('/{id}', [ContentPlanController::class, 'show']);
         Route::post('/', [ContentPlanController::class, 'store']);
         Route::put('/{id}', [ContentPlanController::class, 'update']);
-        Route::delete('/{id}', [ContentPlanController::class, 'destroy']);
-        Route::post('/{id}/post', [ContentPlanController::class, 'postContent']);
+        // Route::post('/{id}/post', [ContentPlanController::class, 'postContent']);
         Route::get('/{id}/analytics', [EngagementController::class, 'analyticContent']);
         Route::post('/{id}/analytics/record', [EngagementController::class, 'store']);
         Route::put('/{id}/analytics/record/{engagementId}', [EngagementController::class, 'update']);
     });
 
+    Route::prefix('dashboard')->group(function () {
+        Route::get('/', [DashboardController::class, 'index']);
+        Route::get('/progress-bar', [DashboardController::class, 'progressBar']);
+        Route::get('/stacked-bar', [DashboardController::class, 'stackedBar']);
+        Route::get('/visit-summary', [DashboardController::class, 'visitSummary']);
+    });
+
+    Route::prefix('influencers')->group(function () {
+        Route::get('/', [InfluencerController::class, 'index']);
+        Route::post('/', [InfluencerController::class, 'store']);
+        Route::put('/{id}', [InfluencerController::class, 'update']);
+        Route::get('/all', [InfluencerController::class, 'all']);
+    });
     Route::prefix('analisis')->group(function () {
         Route::get('/straight-ticket/district', [Analisis::class, 'straightTicketByDistrict']);
     });
     Route::get('/content-statuses', function () {
         return ContentStatus::select('id', 'label')->get();
     });
-    Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/activity-logs', [HistoryController::class, 'index']);
     Route::get('/budget', [BudgetController::class, 'index']);
     Route::get('/platforms', [ContentPlatformController::class, 'index']);
     Route::get('/content-types', [ContentTypeController::class, 'index']);
-    Route::get('/influencers', [InfluencerController::class, 'index']);
-    Route::post('/influencers', [InfluencerController::class, 'store']);
-    Route::put('/influencers/{id}', [InfluencerController::class, 'update']);
 });
 
 Route::middleware(['auth:sanctum', 'role:koordinator'])->group(function () {

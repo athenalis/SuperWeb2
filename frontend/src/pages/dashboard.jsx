@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Icon } from "@iconify/react"
+import ReactECharts from "echarts-for-react";
 import api from "../lib/axios"
 import "leaflet/dist/leaflet.css"
 import L from "leaflet"
 import VisitMap from "../components/maps/VisitMap"
 
 // =========================================================================
-// 1. KOMPONEN ANIMASI ANGKA (Suntikan Fitur Baru)
+// 1. KOMPONEN ANIMASI ANGKA
 // =========================================================================
 const AnimateNumber = ({ value }) => {
   const [displayValue, setDisplayValue] = useState(0);
@@ -26,191 +27,543 @@ const AnimateNumber = ({ value }) => {
 };
 
 // =========================================================================
-// 2. DATA MENU (Tetap Asli)
+// 2. DATA MENU
 // =========================================================================
 const quickMenus = [
-  { title: "Data Koordinator", desc: "Kelola data koordinator", icon: "solar:user-id-bold", path: "/koordinator" },
-  { title: "Data Relawan", desc: "Kelola data relawan", icon: "solar:users-group-rounded-bold", path: "/relawan" },
-  { title: "Konten", desc: "Kelola Jadwal Konten", icon: "uil:schedule", path: "/content" },
-  { title: "Suara", desc: "Analisis Suara", icon: "solar:chart-bold", path: "/suara/dashboard" },
+  { title: "Data Koordinator", desc: "Kelola data koordinator", icon: "solar:user-id-bold", path: "/koordinator", gradient: "from-blue-500 to-blue-600" },
+  { title: "Data Relawan", desc: "Kelola data relawan", icon: "solar:users-group-rounded-bold", path: "/relawan", gradient: "from-green-500 to-green-600" },
+  { title: "Konten", desc: "Kelola Jadwal Konten", icon: "uil:schedule", path: "/content", gradient: "from-purple-500 to-purple-600" },
+  { title: "Suara", desc: "Analisis Suara", icon: "solar:chart-bold", path: "/suara/dashboard", gradient: "from-orange-500 to-orange-600" },
 ]
 
+// Platform config dengan warna brand
+const platformConfig = {
+  TikTok: { icon: "ic:baseline-tiktok", color: "#000000" },
+  Instagram: { icon: "skill-icons:instagram", color: "#E1306C" },
+  YouTube: { icon: "logos:youtube-icon", color: "#FF0000" },
+  Facebook: { icon: "logos:facebook", color: "#1877F2" },
+  X: { icon: "ri:twitter-x-line", color: "rgb(83, 84, 88)" },
+};
+
 function getPlatformIcon(name) {
-  switch (name) {
-    case "TikTok":
-      return { icon: "ic:baseline-tiktok", size: 22 };
-    case "Instagram":
-      return { icon: "skill-icons:instagram", size: 22 };
-    case "YouTube":
-      return { icon: "logos:youtube-icon", size: 22 };
-    case "Facebook":
-      return { icon: "logos:facebook", size: 22 };
-    case "X":
-    case "Twitter":
-      return { icon: "ri:twitter-x-line", size: 22 };
-    default:
-      return { icon: "mdi:web", size: 22 };
-  }
+  return platformConfig[name] || { icon: "mdi:web", color: "#6b7280" };
 }
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const role = localStorage.getItem("role") || "Admin"
-
   const [summary, setSummary] = useState({ koordinator_total: 0, relawan_total: 0 })
+  const [barOption, setBarOption] = useState({});
+  const [stackedOption, setStackedOption] = useState({});
+  const [contentSummary, setContentSummary] = useState({
+    per_platform: [
+      { platform: "TikTok", total: 0 },
+      { platform: "Instagram", total: 0 },
+      { platform: "YouTube", total: 0 },
+      { platform: "Facebook", total: 0 },
+      { platform: "X", total: 0 },
+    ],
+    comparison: {
+      target: 0,
+      posted: 0
+    }
+  });
   const [visits, setVisits] = useState([])
   const [isLoading, setIsLoading] = useState(true);
+  const [visitSummary, setVisitSummary] = useState(null);
+  const [harapanList, setHarapanList] = useState([]);
+  const [visitPieOption, setVisitPieOption] = useState({});
+  const [progressData, setProgressData] = useState([]);
+  const [progressOption, setProgressOption] = useState({});
+  const [isMobile, setIsMobile] = useState(false);
 
-  const contentSummary = {
-    target_total: 100,
-    posted_total: 45,
-    by_platform: [
-      { name: "TikTok", total: 20 },
-      { name: "Instagram", total: 12 },
-      { name: "YouTube", total: 5 },
-      { name: "Facebook", total: 6 },
-      { name: "X", total: 2 },
-    ]
-  };  
+  // Detect screen size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token")
     if (!token) return navigate("/login")
-
-    // Ambil data dari API
+    
     Promise.all([
       api.get("/dashboard"),
-      api.get("peta/visit")
-    ]).then(([resSummary, resVisits]) => {
-      if (resSummary.data.success) setSummary(resSummary.data.data);
+      api.get("peta/visit"),
+      api.get("/dashboard/visit-summary"),
+      api.get("/dashboard/progress-bar")
+    ]).then(([resSummary, resVisits, resVisitSummary, resProgress]) => {
+      if (resSummary.data.success) {
+        setSummary(resSummary.data.data);
+        if (resSummary.data.data.content_summary) {
+          setContentSummary(resSummary.data.data.content_summary);
+        }
+        if (resProgress.data.success) {
+          setProgressData(resProgress.data.data);
+        }
+      }
       if (resVisits.data.success) setVisits(resVisits.data.data);
+      if (resVisitSummary.data.success) {
+        const data = resVisitSummary.data.data;
+        setVisitSummary(data.pie);
+        setHarapanList(data.harapan);
+      }
     }).finally(() => {
-      // Loading dimatikan setelah data Summary & Peta masuk
       setIsLoading(false);
     });
   }, [navigate])
 
+  // Build ECharts bar option with brand colors
+  useEffect(() => {
+    const sorted = [...contentSummary.per_platform].sort((a, b) => b.total - a.total);
+    setBarOption({
+      grid: { 
+        left: isMobile ? 50 : 60, 
+        right: isMobile ? 50 : 70, 
+        top: 30, 
+        bottom: 30 
+      },
+      xAxis: {
+        type: "value",
+        axisLabel: { 
+          color: "#64748b", 
+          fontSize: isMobile ? 10 : 12 
+        },
+        splitLine: { lineStyle: { type: "dashed", color: "#e2e8f0" } }
+      },
+      yAxis: {
+        type: "category",
+        inverse: true,
+        data: sorted.map(i => i.platform),
+        axisLabel: {
+          color: "#334155",
+          fontWeight: "600",
+          fontSize: isMobile ? 11 : 13
+        },
+        axisTick: { show: false },
+        axisLine: { show: false },
+      },
+      series: [
+        {
+          type: "bar",
+          data: sorted.map(i => ({
+            value: i.total,
+            itemStyle: {
+              color: platformConfig[i.platform]?.color || "#6b7280",
+              borderRadius: [0, 10, 10, 0]
+            }
+          })),
+          barWidth: isMobile ? 20 : 26,
+          label: {
+            show: true,
+            position: "right",
+            color: "#0f172a",
+            fontWeight: "bold",
+            fontSize: isMobile ? 11 : 14
+          },
+          animationDuration: 1000,
+          animationEasing: "elasticOut",
+        }
+      ],
+    });
+  }, [contentSummary.per_platform, isMobile]);
+
+  // Stacked bar chart - RESPONSIVE
+ useEffect(() => {
+  api.get("/dashboard/stacked-bar").then(res => {
+    if (!res.data.success) return;
+    const data = res.data.data;
+
+    setStackedOption({
+      tooltip: { show: false },
+      legend: {
+        data: ['Sangat Tidak Setuju', 'Tidak Setuju', 'Setuju', 'Sangat Setuju'],
+        top: isMobile ? 0 : undefined,       // legend di atas untuk mobile
+        bottom: isMobile ? undefined : 20,   // legend di bawah untuk desktop
+        itemWidth: isMobile ? 12 : 16,
+        itemHeight: isMobile ? 12 : 16,
+        itemGap: isMobile ? 10 : 24,
+        icon: 'roundRect',
+        textStyle: {
+          color: '#475569',
+          fontSize: isMobile ? 10 : 13,
+          fontWeight: 600
+        }
+      },
+      grid: { 
+        left: isMobile ? 100 : 180, 
+        right: isMobile ? 40 : 80, 
+        top: isMobile ? 40 : 50,      // beri ruang legend di atas
+        bottom: isMobile ? 60 : 80    // cukup ruang untuk mobile
+      },
+      xAxis: {
+        type: 'value',
+        max: 100,
+        interval: 25,
+        axisLabel: { 
+          formatter: '{value}%', 
+          color: '#64748b', 
+          fontSize: isMobile ? 10 : 13,
+          fontWeight: 600
+        },
+        splitLine: { 
+          lineStyle: { type: 'dashed', color: '#e2e8f0', width: 1.5 } 
+        },
+        axisLine: { lineStyle: { color: '#cbd5e1', width: 2 } },
+        axisTick: { show: false }
+      },
+      yAxis: {
+        type: 'category',
+        inverse: true,
+        data: data.map(d => d.question),
+        axisTick: { show: false },
+        axisLine: { show: false },
+        axisLabel: { 
+          color: '#1e293b', 
+          fontWeight: '700', 
+          fontSize: isMobile ? 10 : 13,
+          lineHeight: isMobile ? 14 : 20,
+          width: isMobile ? 80 : 160,
+          overflow: 'truncate',
+          padding: [0, isMobile ? 8 : 12, 0, 0]
+        }
+      },
+      series: [
+        {
+          name: 'Sangat Tidak Setuju',
+          type: 'bar',
+          stack: 'total',
+          barWidth: isMobile ? '50%' : '65%',
+          itemStyle: { 
+            color: '#FF0000',
+            borderRadius: [6, 0, 0, 6],
+            shadowColor: 'rgba(255, 0, 0, 0.3)',
+            shadowBlur: 8,
+            shadowOffsetY: 2
+          },
+          label: {
+            show: true,
+            position: 'inside',
+            color: '#fff',
+            fontSize: isMobile ? 9 : 12,
+            fontWeight: '700',
+            formatter: (params) => {
+              if (params.data.percent < (isMobile ? 10 : 6)) return '';
+              return isMobile 
+                ? `${params.data.count}\n${params.data.percent}%`
+                : `${params.data.count} orang\n(${params.data.percent}%)`;
+            }
+          },
+          data: data.map(d => ({ value: d.percents[1], count: d.counts[1], percent: d.percents[1] }))
+        },
+        {
+          name: 'Tidak Setuju',
+          type: 'bar',
+          stack: 'total',
+          itemStyle: { color: '#FACC15', shadowColor: 'rgba(250, 204, 21, 0.3)', shadowBlur: 8, shadowOffsetY: 2 },
+          label: {
+            show: true,
+            position: 'inside',
+            color: '#fff',
+            fontSize: isMobile ? 9 : 12,
+            fontWeight: '700',
+            formatter: (params) => {
+              if (params.data.percent < (isMobile ? 10 : 6)) return '';
+              return isMobile 
+                ? `${params.data.count}\n${params.data.percent}%`
+                : `${params.data.count} orang\n(${params.data.percent}%)`;
+            }
+          },
+          data: data.map(d => ({ value: d.percents[2], count: d.counts[2], percent: d.percents[2] }))
+        },
+        {
+          name: 'Setuju',
+          type: 'bar',
+          stack: 'total',
+          itemStyle: { color: '#2563EB', shadowColor: 'rgba(37, 99, 235, 0.3)', shadowBlur: 8, shadowOffsetY: 2 },
+          label: {
+            show: true,
+            position: 'inside',
+            color: '#fff',
+            fontSize: isMobile ? 9 : 12,
+            fontWeight: '700',
+            formatter: (params) => {
+              if (params.data.percent < (isMobile ? 10 : 6)) return '';
+              return isMobile 
+                ? `${params.data.count}\n${params.data.percent}%`
+                : `${params.data.count} orang\n(${params.data.percent}%)`;
+            }
+          },
+          data: data.map(d => ({ value: d.percents[3], count: d.counts[3], percent: d.percents[3] }))
+        },
+        {
+          name: 'Sangat Setuju',
+          type: 'bar',
+          stack: 'total',
+          itemStyle: { color: '#22C55E', borderRadius: [0, 6, 6, 0], shadowColor: 'rgba(34, 197, 94, 0.3)', shadowBlur: 8, shadowOffsetY: 2 },
+          label: {
+            show: true,
+            position: 'inside',
+            color: '#fff',
+            fontSize: isMobile ? 9 : 12,
+            fontWeight: '700',
+            formatter: (params) => {
+              if (params.data.percent < (isMobile ? 10 : 6)) return '';
+              return isMobile 
+                ? `${params.data.count}\n${params.data.percent}%`
+                : `${params.data.count} orang\n(${params.data.percent}%)`;
+            }
+          },
+          data: data.map(d => ({ value: d.percents[4], count: d.counts[4], percent: d.percents[4] }))
+        }
+      ],
+      animationDuration: 1000,
+      animationEasing: 'cubicOut',
+      animationDelay: (idx) => idx * 50
+    });
+  });
+}, [isMobile]);
+
+
+  useEffect(() => {
+    if (!visitSummary) return;
+    setVisitPieOption({
+      tooltip: { show: false },
+      legend: {
+        bottom: isMobile ? 5 : 10,
+        itemGap: isMobile ? 8 : 12,
+        itemWidth: isMobile ? 10 : 12,
+        itemHeight: isMobile ? 10 : 12,
+        icon: 'circle',
+        textStyle: {
+          fontSize: isMobile ? 9 : 11,
+          color: '#475569'
+        }
+      },
+      series: [
+        {
+          type: "pie",
+          radius: '75%',
+          center: ['50%', '45%'],
+          data: visitSummary.series.map((i, idx) => ({
+            name: i.name,
+            value: i.value,
+            itemStyle: {
+              borderRadius: 6,
+              borderColor: '#fff',
+              borderWidth: 3
+            },
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.3)'
+              },
+              label: {
+                show: true,
+                fontSize: isMobile ? 12 : 14,
+                fontWeight: 'bold'
+              }
+            }
+          })),
+          label: {
+            show: true,
+            position: 'outside',
+            formatter: (params) => {
+              return isMobile 
+                ? `${params.name}\n${params.percent}%`
+                : `${params.name}\n${params.percent}% (${params.value} orang)`;
+            },
+            fontSize: isMobile ? 9 : 11,
+            fontWeight: '600',
+            color: '#334155',
+            lineHeight: isMobile ? 12 : 16
+          },
+          labelLine: {
+            show: true,
+            length: isMobile ? 5 : 10,
+            length2: isMobile ? 5 : 10,
+            smooth: true
+          },
+          animationType: 'scale',
+          animationEasing: 'elasticOut',
+          animationDelay: (idx) => idx * 100
+        }
+      ],
+      color: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4']
+    });
+  }, [visitSummary, isMobile]);
+
+  useEffect(() => {
+    if (!progressData.length) return;
+    const labels = progressData.map(i =>
+      i.question.replaceAll("_", " ").toUpperCase()
+    );
+    setProgressOption({
+      grid: {
+        left: 10,
+        right: isMobile ? 45 : 60,
+        top: 10,
+        bottom: 10,
+        containLabel: true
+      },
+      xAxis: {
+        type: 'value',
+        max: 100,
+        axisLabel: { 
+          formatter: '{value}%', 
+          color: '#64748b',
+          fontSize: isMobile ? 9 : 12
+        },
+        splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } }
+      },
+      yAxis: {
+        type: 'category',
+        data: labels,
+        inverse: true,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: '#334155',
+          fontWeight: 600,
+          fontSize: isMobile ? 9 : 12,
+          lineHeight: isMobile ? 12 : 16,
+          formatter: (value) => {
+            const words = value.split(" ");
+            if (words.length <= 1) return value;
+            let lines = [];
+            for (let i = 0; i < words.length; i += 2) {
+              lines.push(words.slice(i, i + 2).join(" "));
+            }
+            return lines.join("\n");
+          }
+        }
+      },
+      series: [
+        {
+          type: 'bar',
+          data: progressData.map(i => ({
+            value: i.percent_positive,
+            labelText: `${i.percent_positive}% (${i.positive_count}/${i.total_count})`
+          })),
+          barWidth: isMobile ? 14 : 18,
+          itemStyle: {
+            color: '#2563EB',
+            borderRadius: [0, 10, 10, 0]
+          },
+          label: {
+            show: true,
+            position: 'right',
+            formatter: p => p.data.labelText,
+            color: '#0f172a',
+            fontWeight: 'bold',
+            fontSize: isMobile ? 9 : 12
+          },
+          animationDuration: 1000,
+          animationEasing: 'elasticOut'
+        }
+      ]
+    });
+  }, [progressData, isMobile]);
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      
+    <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500 px-2 md:px-0">
       {/* ===== HEADER ===== */}
-      <div className="bg-gradient-to-r from-blue-900 to-blue-700 text-white rounded-xl p-6 shadow">
-        <h1 className="text-2xl font-semibold">Selamat Datang, {role}</h1>
-        <p className="text-sm opacity-90 mt-1">Sistem Manajemen SuperWeb</p>
-      </div>
-
-      {/* ===== SUMMARY SECTION ===== */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        
-        {/* Slot Koordinator */}
-        {isLoading ? (
-          <div className="h-[120px] bg-slate-200 animate-pulse rounded-2xl border border-slate-100"></div>
-        ) : (
-          <div className="bg-gradient-to-r from-blue-600 to-blue-400 text-white p-6 rounded-xl shadow flex justify-between">
+      <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-700 text-white rounded-xl md:rounded-2xl p-4 md:p-8 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-0 w-24 h-24 md:w-48 md:h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 md:gap-3 mb-2">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-white/20 rounded-lg md:rounded-xl flex items-center justify-center backdrop-blur-sm">
+              <Icon icon="solar:home-2-bold" width={isMobile ? 22 : 26} />
+            </div>
             <div>
-              <div className="text-2xl font-bold">
-                <AnimateNumber value={summary.koordinator_total} />
-              </div>
-              <div className="text-sm opacity-80">Total Koordinator</div>
+              <h1 className="text-xl md:text-3xl font-bold">Selamat Datang, {role}</h1>
+              <p className="text-xs md:text-sm text-blue-100 mt-0.5">Sistem Manajemen SuperWeb</p>
             </div>
-              <Icon icon="solar:user-id-bold" width={32} />
           </div>
-        )}
-
-        {/* Slot Relawan */}
-        {isLoading ? (
-          <div className="h-[120px] bg-slate-200 animate-pulse rounded-2xl border border-slate-100"></div>
-        ) : (
-          <div className="bg-gradient-to-r from-green-500 to-green-300 text-white p-6 rounded-xl shadow flex justify-between">
-            <div>
-              <div className="text-2xl font-bold">
-                <AnimateNumber value={summary.relawan_total} />
-              </div>
-              <div className="text-sm opacity-80">Total Relawan</div>
-            </div>
-              <Icon icon="solar:users-group-rounded-bold" width={32} />
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-50">
-        <h2 className="text-lg font-semibold mb-1 text-slate-800">
-          Resume Konten per Platform
-        </h2>
-        <p className="text-sm text-slate-500 mb-5">
-          Jumlah konten yang telah diposting di masing-masing platform
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {contentSummary.by_platform.map(p => {
-          const icon = getPlatformIcon(p.name);
-          return (
-            <div
-              key={p.name}
-              className="rounded-xl border bg-white p-4 shadow-sm"
-            >
-              {/* HEADER / KETERANGAN (ganti tanggal) */}
-              <div className="text-xs text-slate-500 mb-3">
-                Resume konten terposting
-              </div>
-
-              {/* BODY */}
-              <div className="flex items-center justify-between">
-                {/* LEFT : ICON + PLATFORM */}
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
-                    <Icon icon={icon.icon} width={icon.size} />
-                  </div>
-                  <div className="text-sm font-medium text-slate-700">
-                    {p.name}
-                  </div>
-                </div>
-
-                {/* RIGHT : TOTAL */}
-                <div className="text-xl font-bold text-slate-900">
-                  <AnimateNumber value={p.total} />
-                </div>
-              </div>
-            </div>
-          );
-        })}
         </div>
       </div>
 
-
-      {/* ===== CONTENT TARGET SUMMARY ===== */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <div className="bg-gradient-to-r from-indigo-600 to-indigo-400 text-white p-6 rounded-xl shadow flex justify-between">
-          <div>
-            <div className="text-2xl font-bold">
-              <AnimateNumber value={contentSummary.posted_total} /> /{" "}
-              <AnimateNumber value={contentSummary.target_total} />
+      {/* ===== SUMMARY CARDS ===== */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+        {isLoading ? (
+          <>
+            <div className="h-[120px] md:h-[140px] bg-slate-100 animate-pulse rounded-xl md:rounded-2xl" />
+            <div className="h-[120px] md:h-[140px] bg-slate-100 animate-pulse rounded-xl md:rounded-2xl" />
+          </>
+        ) : (
+          <>
+            {/* Koordinator Card */}
+            <div className="group bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 text-white p-4 md:p-6 rounded-xl md:rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500" />
+              <div className="relative z-10 flex justify-between items-start">
+                <div>
+                  <div className="text-3xl md:text-4xl font-bold mb-1 md:mb-2">
+                    <AnimateNumber value={summary.koordinator_total} />
+                  </div>
+                  <div className="text-xs md:text-sm text-blue-100 font-medium">Total Koordinator</div>
+                </div>
+                <div className="w-12 h-12 md:w-14 md:h-14 bg-white/20 rounded-lg md:rounded-xl flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform">
+                  <Icon icon="solar:user-id-bold" width={isMobile ? 24 : 28} />
+                </div>
+              </div>
             </div>
-            <div className="text-sm opacity-80">
-              Total Postingan Konten
+            {/* Relawan Card */}
+            <div className="group bg-gradient-to-br from-green-600 via-green-500 to-green-400 text-white p-4 md:p-6 rounded-xl md:rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500" />
+              <div className="relative z-10 flex justify-between items-start">
+                <div>
+                  <div className="text-3xl md:text-4xl font-bold mb-1 md:mb-2">
+                    <AnimateNumber value={summary.relawan_total} />
+                  </div>
+                  <div className="text-xs md:text-sm text-green-100 font-medium">Total Relawan</div>
+                </div>
+                <div className="w-12 h-12 md:w-14 md:h-14 bg-white/20 rounded-lg md:rounded-xl flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform">
+                  <Icon icon="solar:users-group-rounded-bold" width={isMobile ? 24 : 28} />
+                </div>
+              </div>
             </div>
-          </div>
-          <Icon icon="solar:document-text-bold" width={32} />
-        </div>
+          </>
+        )}
       </div>
 
       {/* ===== QUICK ACCESS ===== */}
-      <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-50">
-        <h2 className="text-lg font-semibold mb-1 text-slate-800">Akses Cepat</h2>
-        <p className="text-sm text-slate-500 mb-5">Navigasi cepat ke fitur utama sistem</p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-8 border border-slate-100">
+        <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+            <Icon icon="solar:widget-4-bold" className="text-blue-600" width={isMobile ? 18 : 22} />
+          </div>
+          <div>
+            <h2 className="text-lg md:text-xl font-bold text-slate-800">Akses Cepat</h2>
+            <p className="text-xs md:text-sm text-slate-500">Navigasi cepat ke fitur utama sistem</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {quickMenus.map(m => (
-            <div key={m.title} onClick={() => navigate(m.path)}
-              className="group cursor-pointer rounded-2xl border p-5 hover:shadow-md hover:border-blue-600 transition-all duration-300">
-              <div className="flex gap-4">
-                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                  <Icon icon={m.icon} width={26} />
+            <div
+              key={m.title}
+              onClick={() => navigate(m.path)}
+              className="group cursor-pointer rounded-lg md:rounded-xl border-2 border-slate-100 p-3 md:p-5 hover:border-transparent hover:shadow-lg transition-all duration-300 relative overflow-hidden bg-white"
+            >
+              <div className={`absolute inset-0 bg-gradient-to-br ${m.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
+              <div className="relative z-10">
+                <div className="flex flex-col md:flex-row items-start gap-2 md:gap-4 mb-2 md:mb-3">
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-gradient-to-br ${m.gradient} text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
+                    <Icon icon={m.icon} width={isMobile ? 20 : 24} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-bold text-sm md:text-base text-slate-800 group-hover:text-white transition-colors mb-0.5 md:mb-1">{m.title}</div>
+                    <div className="text-[10px] md:text-xs text-slate-500 group-hover:text-white/80 transition-colors line-clamp-2">{m.desc}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="font-semibold text-slate-800">{m.title}</div>
-                  <div className="text-sm text-slate-500 line-clamp-1">{m.desc}</div>
-                  <div className="mt-3 text-sm text-blue-600 font-medium group-hover:translate-x-1 transition-transform inline-block">Buka →</div>
+                <div className="flex items-center gap-1 text-xs md:text-sm font-semibold text-blue-600 group-hover:text-white transition-colors">
+                  <span>Buka</span>
+                  <Icon icon="solar:arrow-right-linear" width={isMobile ? 14 : 18} className="group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
             </div>
@@ -218,20 +571,163 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ===== MAP ===== */}
-      <div className="bg-white rounded-2xl shadow p-6 border border-slate-50">
-        <h2 className="text-lg font-semibold mb-2 text-slate-800">Peta Kunjungan</h2>
-        <div className="h-96 rounded-2xl overflow-hidden bg-slate-100 relative shadow-inner">
-           {/* Jika data sedang dimuat, beri indikator tipis agar tidak kaku */}
-           {isLoading && (
-             <div className="absolute inset-0 bg-slate-200 animate-pulse z-10 flex items-center justify-center">
-               <span className="text-slate-400 text-sm font-medium">Memuat Peta...</span>
-             </div>
-           )}
-           <VisitMap visits={visits} />
+      {/* ===== CONTENT ANALYTICS ===== */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        {/* Resume Konten Chart */}
+        <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6 border border-slate-100">
+          <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+              <Icon icon="solar:document-text-bold" className="text-purple-600" width={isMobile ? 18 : 22} />
+            </div>
+            <div>
+              <h2 className="text-lg md:text-xl font-bold text-slate-800">Resume Konten</h2>
+              <p className="text-xs md:text-sm text-slate-500">Jumlah konten yang telah diposting</p>
+            </div>
+          </div>
+          <div className="h-[200px] md:h-[280px] mt-3 md:mt-4">
+            <ReactECharts
+              option={barOption}
+              notMerge={true}
+              lazyUpdate={true}
+              style={{ height: "100%", width: "100%" }}
+            />
+          </div>
+        </div>
+        {/* Comparison Card */}
+        <div className="bg-gradient-to-br from-indigo-600 via-indigo-500 to-purple-600 text-white p-4 md:p-8 rounded-xl md:rounded-2xl shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 md:w-48 md:h-48 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-28 h-28 md:w-40 md:h-40 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+          <div className="relative z-10">
+            <div className="flex items-start justify-between mb-4 md:mb-8">
+              <div>
+                <div className="text-3xl md:text-5xl font-bold mb-1 md:mb-2">
+                  <AnimateNumber value={contentSummary.comparison.posted} /> / <AnimateNumber value={contentSummary.comparison.target} />
+                </div>
+                <div className="text-xs md:text-base text-indigo-100 font-medium">Total Postingan Konten</div>
+              </div>
+              <div className="w-12 h-12 md:w-14 md:h-14 bg-white/20 rounded-lg md:rounded-xl flex items-center justify-center backdrop-blur-sm">
+                <Icon icon="solar:chart-2-bold" width={isMobile ? 24 : 28} />
+              </div>
+            </div>
+            <div className="space-y-3 md:space-y-5">
+              {/* Target */}
+              <div>
+                <div className="flex justify-between text-xs md:text-sm mb-2 font-medium">
+                  <span className="text-indigo-100">Target</span>
+                  <span>{contentSummary.comparison.target}</span>
+                </div>
+                <div className="h-2 md:h-3 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
+                  <div className="h-full rounded-full bg-white/50 transition-all duration-1000" style={{ width: '100%' }} />
+                </div>
+              </div>
+              {/* Posted */}
+              <div>
+                <div className="flex justify-between text-xs md:text-sm mb-2 font-medium">
+                  <span className="text-indigo-100">Posted</span>
+                  <span>{contentSummary.comparison.posted}</span>
+                </div>
+                <div className="h-2 md:h-3 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
+                  <div
+                    className="h-full rounded-full bg-white shadow-lg transition-all duration-1000"
+                    style={{
+                      width: `${contentSummary.comparison.target > 0 ? (contentSummary.comparison.posted / contentSummary.comparison.target) * 100 : 0}%`
+                    }}
+                  />
+                </div>
+              </div>
+              {/* Percentage */}
+              <div className="text-center pt-3 md:pt-4 border-t border-white/20">
+                <div className="text-3xl md:text-5xl font-bold mb-1">
+                  {contentSummary.comparison.target > 0
+                    ? Math.round((contentSummary.comparison.posted / contentSummary.comparison.target) * 100)
+                    : 0}%
+                </div>
+                <div className="text-xs md:text-sm text-indigo-100 font-medium">Tercapai dari Target</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* ===== SURVEY CHART ===== */}
+      <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6 border border-slate-100">
+        <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+            <Icon icon="solar:chart-square-bold" className="text-orange-600" width={isMobile ? 18 : 22} />
+          </div>
+          <div>
+            <h2 className="text-lg md:text-xl font-bold text-slate-800">Resume Survey</h2>
+            <p className="text-xs md:text-sm text-slate-500">Distribusi jawaban responden untuk tiap pertanyaan</p>
+          </div>
+        </div>
+        <div className="h-[400px] md:h-[500px] mt-3 md:mt-4">
+          <ReactECharts
+            option={stackedOption}
+            notMerge={true}
+            lazyUpdate={true}
+            style={{ height: "100%", width: "100%" }}
+          />
+        </div>
+      </div>
+
+      {/* ===== SURVEY CHART ===== */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+        {/* PERSENTASE DUKUNGAN */}
+        <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6">
+          <h2 className="font-bold text-base md:text-lg mb-3 md:mb-4">Persentase Dukungan</h2>
+          <div className="h-[200px] md:h-[280px]">
+            <ReactECharts
+              option={progressOption}
+              style={{ height: "100%", width: "100%" }}
+            />
+          </div>
+        </div>
+        {/* PIE */}
+        <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6">
+          <h2 className="font-bold text-base md:text-lg mb-3 md:mb-4">Status Kunjungan</h2>
+          <div className="h-[200px] md:h-[280px]">
+            <ReactECharts option={visitPieOption} style={{ height: "100%" }} />
+          </div>
+        </div>
+        {/* HARAPAN */}
+        <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6 flex flex-col h-[280px] md:h-[360px]">
+          <h2 className="font-bold text-base md:text-lg mb-3 md:mb-4">Harapan</h2>
+          <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+            {harapanList.map((h, i) => (
+              <div
+                key={i}
+                className="p-2 md:p-3 rounded-lg md:rounded-xl bg-slate-100 text-xs md:text-sm shadow-sm leading-relaxed"
+              >
+                {h}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ===== MAP ===== */}
+      <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6 border border-slate-100">
+        <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 rounded-lg flex items-center justify-center">
+            <Icon icon="solar:map-point-bold" className="text-green-600" width={isMobile ? 18 : 22} />
+          </div>
+          <div>
+            <h2 className="text-lg md:text-xl font-bold text-slate-800">Peta Kunjungan</h2>
+            <p className="text-xs md:text-sm text-slate-500">Visualisasi lokasi kunjungan tim</p>
+          </div>
+        </div>
+        <div className="h-[300px] md:h-[400px] rounded-lg md:rounded-xl overflow-hidden bg-slate-50 relative shadow-inner border border-slate-200">
+          {isLoading && (
+            <div className="absolute inset-0 bg-slate-100 animate-pulse z-10 flex items-center justify-center">
+              <div className="text-center">
+                <Icon icon="svg-spinners:3-dots-scale" width={isMobile ? 32 : 40} className="text-slate-400 mb-2" />
+                <span className="text-slate-500 text-xs md:text-sm font-medium">Memuat Peta...</span>
+              </div>
+            </div>
+          )}
+          <VisitMap visits={visits} />
+        </div>
+      </div>
     </div>
   )
 }

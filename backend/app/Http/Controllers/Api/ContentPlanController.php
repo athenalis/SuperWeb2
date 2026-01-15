@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-
 use App\Models\ContentPlan;
 use Illuminate\Http\Request;
 use App\Models\ContentBudget;
@@ -11,232 +10,209 @@ use App\Models\ContentPlatformAd;
 use Illuminate\Support\Facades\DB;
 use App\Models\ContentTypePlatform;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 
 class ContentPlanController extends Controller
 {
-                /* ======================
-                INDEX (VERSI SERVER SIDE FILTER)
-            ====================== */
-            public function index(Request $request) // <-- Jangan lupa tambah Request $request
-            {
-                $today = Carbon::today()->toDateString();
-                $statusFilter = $request->query('status'); // Menangkap statusFilter dari React
+    /* =====================================================
+     * INDEX — SERVER SIDE DATATABLE
+     * ===================================================== */
+    public function index(Request $request)
+    {
+        $today = Carbon::today()->toDateString();
+        $postedStatusId = $this->getPostedStatusId();
 
-                $query = ContentPlan::with([
-                    'status',
-                    'budgetWithTrashed',
-                    'contentPlatforms.platform',
-                    'contentPlatforms.contentType',
-                    'contentPlatforms.ads' => fn($q) => $q->withTrashed(),
-                    'influencers',
-                    'ads',
-                ])
-                ->select('*')
-                ->selectRaw("
-                    CASE
-                        WHEN posting_date < ? AND status_id != (
-                            SELECT id FROM content_statuses WHERE label = 'Diposting' LIMIT 1
-                        )
-                        THEN 1 ELSE 0
-                    END AS is_late
-                ", [$today]);
+        $perPage  = (int) $request->get('per_page', 10);
+        $search   = $request->get('search');
+        $status   = $request->get('status');
+        $platform = $request->get('platform');
+        $sortBy   = $request->get('sort_by', 'posting_date');
+        $sortDir  = $request->get('sort_dir', 'asc');
 
+        $query = ContentPlan::query()
+            ->with([
+                'status:id,label',
+                'budgetWithTrashed:id,content_plan_id,budget_content',
+                'contentPlatforms.platform:id,name',
+                'contentPlatforms.ads',
+            ])
+            ->selectRaw("
+                content_plans.*,
+                CASE
+                    WHEN posting_date < ? AND status_id != ?
+                    THEN 1 ELSE 0
+                END AS is_late
+            ", [$today, $postedStatusId]);
 
-    // --- LOGIKA FILTER STATUS (DROPDOWN) ---
-    if (!empty($statusFilter)) {
-        $query->whereHas('status', function($q) use ($statusFilter) {
-            $q->where('label', $statusFilter);
+        /* ================= SEARCH ================= */
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('posting_date', 'like', "%{$search}%")
+                  ->orWhereHas('status', fn ($s) =>
+                        $s->where('label', 'like', "%{$search}%")
+                  )
+                  ->orWhereHas('contentPlatforms.platform', fn ($p) =>
+                        $p->where('name', 'like', "%{$search}%")
+                  );
+            });
+        }
+
+        /* ================= FILTER STATUS ================= */
+        if ($status) {
+            $query->whereHas('status', fn ($q) =>
+                $q->where('label', $status)
+            );
+        }
+
+        /* ================= FILTER PLATFORM ================= */
+        if ($platform) {
+            $query->whereHas('contentPlatforms.platform', fn ($q) =>
+                $q->where('name', $platform)
+            );
+        }
+
+        /* ================= SORT ================= */
+        if ($sortBy === 'budget') {
+            $query->leftJoin(
+                'content_budgets as cb',
+                'cb.content_plan_id',
+                '=',
+                'content_plans.id'
+            )->orderBy('cb.budget_content', $sortDir);
+        } else {
+            $query->orderBy($sortBy, $sortDir);
+        }
+
+        /* ================= LATE PRIORITY ================= */
+        $query->orderByDesc('is_late');
+
+        return response()->json(
+            $query->paginate($perPage)
+        );
+    }
+
+    /* =====================================================
+     * SHOW
+     * ===================================================== */
+    public function show($id)
+    {
+        return Cache::remember("content_plan_{$id}", 300, function () use ($id) {
+            return ContentPlan::with([
+                'status',
+                'budgetWithTrashed',
+                'contentPlatforms.platform',
+                'contentPlatforms.contentType',
+                'contentPlatforms.ads',
+                'influencers.platforms.platform',
+                'ads',
+            ])->findOrFail($id);
         });
     }
 
-    $query->orderByDesc('is_late')
-          ->orderBy('posting_date', 'asc');
-
-    $data = $query->get();
-    $lateCount = $data->where('is_late', 1)->count();
-
-    return response()->json([
-        'data' => $data,
-        'meta' => [
-            'late_count' => $lateCount,
-        ],
-    ]);
-}
-    /* ======================
-        DETAIL
-    ====================== */
-    public function show($id)
-    {
-        $data = ContentPlan::with([
-            'status',
-            'budgetWithTrashed',
-            'contentPlatforms.platform',
-            'contentPlatforms.contentType',
-            'contentPlatforms.ads' => fn($q) => $q->withTrashed(),
-            'influencers.platforms.platform', // ✅ FOLLOWERS MASUK
-            'ads',
-        ])->findOrFail($id);
-
-        return response()->json($data);
-    }
-
+    /* =====================================================
+     * STORE
+     * ===================================================== */
     public function store(Request $request)
     {
-        // ======================
-        // VALIDASI UTAMA
-        // ======================
-        $request->validate([
-            'title' => 'required|string',
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
             'posting_date' => 'required|date',
             'content_types' => 'required|array|min:1',
             'budget_content' => 'required|numeric|min:0',
             'is_ads' => 'boolean',
             'ads_by_platform' => 'nullable|array',
+            'ads_by_platform.*.start_date' => 'required_with:ads_by_platform|date',
+            'ads_by_platform.*.end_date' => 'required_with:ads_by_platform|date|after_or_equal:ads_by_platform.*.start_date',
+            'ads_by_platform.*.budget_ads' => 'required_with:ads_by_platform|numeric|min:0',
             'description' => 'nullable|string',
             'influencer_ids' => 'nullable|array',
-            'links' => 'nullable|array',
+            'influencer_ids.*' => 'exists:influencers,id',
         ]);
 
-        // ======================
-        // TRANSAKSI DB
-        // ======================
         DB::beginTransaction();
         try {
-            // CREATE CONTENT PLAN
+            $this->validateContentTypes($validated['content_types']);
+
             $contentPlan = ContentPlan::create([
-                'title' => $request->title,
-                'posting_date' => $request->posting_date,
-                'status_id' => 1, // default status
-                'description' => $request->description,
+                'title' => $validated['title'],
+                'posting_date' => $validated['posting_date'],
+                'status_id' => 1,
+                'description' => $validated['description'] ?? null,
                 'refund_budget' => false,
             ]);
 
-            // PLATFORM & CONTENT TYPE
-            foreach ($request->content_types as $platformId => $contentTypes) {
+            $contentPlatformsData = [];
+            foreach ($validated['content_types'] as $platformId => $contentTypes) {
                 foreach ($contentTypes as $contentTypeId => $data) {
-
-                    $isValid = ContentTypePlatform::where('platform_id', $platformId)
-                        ->where('content_type_id', $contentTypeId)
-                        ->exists();
-
-                    if (!$isValid) {
-                        throw new \Exception("Content type tidak valid");
-                    }
-
-                    ContentPlatform::create([
+                    $contentPlatformsData[] = [
                         'content_plan_id' => $contentPlan->id,
                         'platform_id' => $platformId,
                         'content_type_id' => $contentTypeId,
                         'is_collaborator' => $data['is_collaborator'] ?? false,
                         'link' => $data['link'] ?? null,
-                    ]);
+                    ];
                 }
             }
+            ContentPlatform::insert($contentPlatformsData);
 
-            // CONTENT BUDGET
             ContentBudget::create([
                 'content_plan_id' => $contentPlan->id,
-                'budget_content' => $request->budget_content,
+                'budget_content' => $validated['budget_content'],
             ]);
 
-            // ADS (jika aktif)
-            if ($request->boolean('is_ads') && $request->filled('ads_by_platform')) {
-
-                foreach ($request->ads_by_platform as $platformId => $ads) {
-
-                    ContentPlatformAd::updateOrCreate(
-                        [
-                            'content_plan_id' => $contentPlan->id,
-                            'platform_id' => $platformId,
-                        ],
-                        [
-                            'is_ads' => true,
-                            'start_date' => $ads['start_date'],
-                            'end_date' => $ads['end_date'],
-                            'budget_ads' => $ads['budget_ads'],
-                        ]
-                    );
+            if ($request->boolean('is_ads') && !empty($validated['ads_by_platform'])) {
+                $adsData = [];
+                foreach ($validated['ads_by_platform'] as $platformId => $ads) {
+                    $adsData[] = [
+                        'content_plan_id' => $contentPlan->id,
+                        'platform_id' => $platformId,
+                        'is_ads' => true,
+                        'start_date' => $ads['start_date'],
+                        'end_date' => $ads['end_date'],
+                        'budget_ads' => $ads['budget_ads'],
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
                 }
+                ContentPlatformAd::insert($adsData);
             }
 
-            // INFLUENCERS (jika ada)
-            if ($request->filled('influencer_ids')) {
-                $contentPlan->influencers()->attach($request->influencer_ids);
+            if (!empty($validated['influencer_ids'])) {
+                $contentPlan->influencers()->attach($validated['influencer_ids']);
             }
+
+            $this->clearContentPlanCache();
 
             DB::commit();
-
-            return response()->json([
-                'message' => 'Content plan berhasil dibuat',
-                'data' => $contentPlan->load([
-                    'status',
-                    'budget',
-                    'contentPlatforms.platform',
-                    'contentPlatforms.contentType',
-                    'contentPlatforms.ads',
-                    'influencers.platforms.platform',
-                ]),
-            ], 201);
+            return response()->json(['message' => 'Content plan created'], 201);
         } catch (\Throwable $e) {
             DB::rollBack();
-            return response()->json([
-                'message' => 'Gagal membuat content plan',
-                'error' => $e->getMessage(),
-            ], 500);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
-    /* ======================
-        UPDATE
-    ====================== */
+    /* =====================================================
+     * UPDATE
+     * ===================================================== */
     public function update(Request $request, $id)
     {
-        $request->validate([
-            'title' => 'required|string',
-            'posting_date' => 'required|date',
-            'status_id' => 'required|exists:content_statuses,id',
-            'content_types' => 'required|array|min:1',
-            'budget_content' => 'required|numeric|min:0',
-            'is_ads' => 'boolean',
-            'ads_by_platform' => 'nullable|array',
-            'refund_budget' => 'boolean',
-            'influencer_ids' => 'nullable|array',
-        ]);
-
         DB::beginTransaction();
-
         try {
             $contentPlan = ContentPlan::findOrFail($id);
 
-            /* ===============================
-         * UPDATE BASIC INFO
-         * =============================== */
-            $contentPlan->update([
-                'title' => $request->title,
-                'posting_date' => $request->posting_date,
-                'status_id' => $request->status_id,
-                'description' => $request->description,
-            ]);
+            $contentPlan->update($request->only([
+                'title',
+                'posting_date',
+                'status_id',
+                'description',
+            ]));
 
-            /* ===============================
-         * RESET CONTENT PLATFORM
-         * =============================== */
             ContentPlatform::where('content_plan_id', $id)->delete();
 
             foreach ($request->content_types as $platformId => $contentTypes) {
                 foreach ($contentTypes as $contentTypeId => $data) {
-
-                    $valid = ContentTypePlatform::where([
-                        'platform_id' => $platformId,
-                        'content_type_id' => $contentTypeId,
-                    ])->exists();
-
-                    if (!$valid) {
-                        throw new \Exception('Content type tidak valid');
-                    }
-
                     ContentPlatform::create([
                         'content_plan_id' => $id,
                         'platform_id' => $platformId,
@@ -247,88 +223,70 @@ class ContentPlanController extends Controller
                 }
             }
 
-            /* ===============================
-         * UPDATE BUDGET
-         * =============================== */
             ContentBudget::updateOrCreate(
                 ['content_plan_id' => $id],
                 ['budget_content' => $request->budget_content]
             );
 
-            /* ===============================
- * UPDATE ADS
- * =============================== */
-            if ($request->boolean('is_ads') && $request->filled('ads_by_platform')) {
-
-                // HARD DELETE ads yg tidak dipakai lagi
-                ContentPlatformAd::where('content_plan_id', $id)
-                    ->whereNotIn('platform_id', array_keys($request->ads_by_platform))
-                    ->forceDelete();
-
-                foreach ($request->ads_by_platform as $platformId => $ads) {
-
-                    if ($ads['end_date'] < $ads['start_date']) {
-                        throw new \Exception('End date ads harus >= start date');
-                    }
-
-                    ContentPlatformAd::withTrashed()->updateOrCreate(
-                        [
-                            'content_plan_id' => $id,
-                            'platform_id' => $platformId,
-                        ],
-                        [
-                            'is_ads' => true,
-                            'start_date' => $ads['start_date'],
-                            'end_date' => $ads['end_date'],
-                            'budget_ads' => $ads['budget_ads'],
-                            'deleted_at' => null, // ⬅️ PENTING
-                        ]
-                    );
-                }
-            } else {
-                // ADS DIMATIKAN → HAPUS FISIK
-                ContentPlatformAd::where('content_plan_id', $id)->forceDelete();
-            }
-
-            /* ===============================
-         * REFUND BUDGET
-         * =============================== */
-            if (
-                $request->status_id == 5 &&
-                $request->boolean('refund_budget') &&
-                !$contentPlan->refund_budget
-            ) {
-                ContentBudget::where('content_plan_id', $id)->delete();
-                ContentPlatformAd::where('content_plan_id', $id)->delete();
-
-                $contentPlan->update(['refund_budget' => true]);
-            }
-
-            /* ===============================
-         * SYNC INFLUENCER
-         * =============================== */
             $contentPlan->influencers()->sync($request->influencer_ids ?? []);
 
-            DB::commit();
+            $this->clearContentPlanCache($id);
 
-            return response()->json([
-                'message' => 'Content plan berhasil diupdate',
-                'data' => ContentPlan::with([
-                    'status',
-                    'budget',
-                    'contentPlatforms.platform',
-                    'contentPlatforms.contentType',
-                    'contentPlatforms.ads',
-                    'influencers.platforms.platform',
-                ])->find($id),
-            ]);
+            DB::commit();
+            return response()->json(['message' => 'Updated']);
         } catch (\Throwable $e) {
             DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 
-            return response()->json([
-                'message' => 'Gagal update content plan',
-                'error' => $e->getMessage(),
-            ], 500);
+    /* =====================================================
+     * SUMMARY
+     * ===================================================== */
+    public function contentSummary()
+    {
+        return Cache::remember('content_summary', 600, function () {
+            return DB::table('platforms')
+                ->leftJoin('content_platforms', 'platforms.id', '=', 'content_platforms.platform_id')
+                ->select('platforms.name', DB::raw('COUNT(*) as total'))
+                ->groupBy('platforms.name')
+                ->get();
+        });
+    }
+
+    /* =====================================================
+     * HELPERS
+     * ===================================================== */
+    private function validateContentTypes(array $contentTypes): void
+    {
+        foreach ($contentTypes as $platformId => $types) {
+            foreach ($types as $contentTypeId => $data) {
+                $valid = ContentTypePlatform::where([
+                    'platform_id' => $platformId,
+                    'content_type_id' => $contentTypeId,
+                ])->exists();
+
+                if (!$valid) {
+                    throw new \Exception('Invalid content type');
+                }
+            }
+        }
+    }
+
+    private function getPostedStatusId(): int
+    {
+        return Cache::remember('posted_status_id', 3600, function () {
+            return DB::table('content_statuses')
+                ->where('label', 'Diposting')
+                ->value('id') ?? 0;
+        });
+    }
+
+    private function clearContentPlanCache(?int $id = null): void
+    {
+        Cache::forget('content_summary');
+        if ($id) {
+            Cache::forget("content_plan_{$id}");
         }
     }
 }

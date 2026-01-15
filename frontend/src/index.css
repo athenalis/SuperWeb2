@@ -81,3 +81,11 @@
   transform: scale(0.5);
   transform-origin: top center;
 }
+
+.react-datepicker-wrapper {
+  width: 100%;
+}
+
+.react-datepicker__input-container {
+  width: 100%;
+}
