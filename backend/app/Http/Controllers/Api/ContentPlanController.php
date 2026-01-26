@@ -85,17 +85,35 @@ class ContentPlanController extends Controller
             $query->orderBy($sortBy, $sortDir);
         }
 
-        /* ================= LATE PRIORITY ================= */
         $query->orderByDesc('is_late');
 
-        return response()->json(
-            $query->paginate($perPage)
-        );
+        $summaryQuery = ContentPlan::query();
+
+        $paginated = $query->paginate($perPage);
+
+        $statusSummary = $summaryQuery
+            ->join('content_statuses', 'content_statuses.id', '=', 'content_plans.status_id')
+            ->selectRaw('content_statuses.label, COUNT(DISTINCT content_plans.id) as total')
+            ->groupBy('content_statuses.label')
+            ->pluck('total', 'label');
+
+        $lateCount = ContentPlan::whereDate('posting_date', '<', $today)
+            ->where('status_id', '!=', $postedStatusId)
+            ->count();
+
+        return response()->json([
+            'data' => $paginated->items(),
+            'meta' => [
+                'current_page' => $paginated->currentPage(),
+                'last_page' => $paginated->lastPage(),
+                'per_page' => $paginated->perPage(),
+                'total' => $paginated->total(),
+            ],
+            'stats' => $statusSummary,
+            'late_count' => $lateCount,
+        ]);
     }
 
-    /* =====================================================
-     * SHOW
-     * ===================================================== */
     public function show($id)
     {
         return Cache::remember("content_plan_{$id}", 300, function () use ($id) {

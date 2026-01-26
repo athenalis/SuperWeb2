@@ -112,6 +112,7 @@ export default function Index() {
   const [plans, setPlans] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
+  const [lateCountGlobal, setLateCountGlobal] = useState(0);
 
   // FILTERS (semua dikirim ke server)
   const [statusFilter, setStatusFilter] = useState("");
@@ -200,7 +201,6 @@ export default function Index() {
         },
       });
 
-      // Support 2 format: paginator {data,last_page,total} OR array
       const payload = res.data;
       const data = Array.isArray(payload)
         ? payload
@@ -208,8 +208,20 @@ export default function Index() {
         ? payload.data
         : [];
 
-      setPlans(data);
-      setStats(hitungStatistik(data));
+        setPlans(data);
+
+        if (payload?.stats) {
+          setStats(payload.stats);
+        } else {
+          setStats(hitungStatistik(data));
+        }
+        
+        // ===== LATE COUNT GLOBAL =====
+        if (typeof payload?.late_count === "number") {
+          setLateCountGlobal(payload.late_count);
+        } else {
+          setLateCountGlobal(0);
+        }        
 
       // paginator meta
       setTotalPage(
@@ -561,7 +573,7 @@ export default function Index() {
           <span>data</span>
         </div>
 
-        {lateCount > 0 && (
+        {(lateCountGlobal || lateCount) > 0 && (
           <div
             onClick={() => setShowLateModal(true)}
             className="cursor-pointer bg-gradient-to-br from-orange-400 to-orange-600 rounded-xl px-6 py-3 shadow-md hover:scale-[1.03] transition flex items-center gap-4 w-fit"
@@ -570,7 +582,7 @@ export default function Index() {
               <div className="text-xs font-semibold text-orange-100 uppercase tracking-wide leading-none">
                 Konten Terlambat
               </div>
-              <div className="text-xl font-extrabold text-white leading-tight">{lateCount}</div>
+              <div className="text-xl font-extrabold text-white leading-tight">{lateCountGlobal || lateCount}</div>
             </div>
             <div className="bg-white/20 p-1.5 rounded-md">
               <Icon icon="mdi:alert-circle-outline" width={18} className="text-white" />

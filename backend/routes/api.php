@@ -170,7 +170,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::put('/{id}', [InfluencerController::class, 'update']);
         Route::get('/all', [InfluencerController::class, 'all']);
     });
-    Route::prefix('analisis')->group(function () {
+    Route::prefix('persebaran')->group(function () {
         Route::get('/straight-ticket/district', [Analisis::class, 'straightTicketByDistrict']);
     });
     Route::get('/content-statuses', function () {

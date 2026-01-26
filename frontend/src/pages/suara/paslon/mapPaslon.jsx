@@ -472,7 +472,7 @@ export default function KelurahanMap({
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-top: 4px;
+                margin-top: 6px;
               ">
                 <div style="
                   display: flex;
@@ -490,7 +490,12 @@ export default function KelurahanMap({
                   <span>${label}</span>
                 </div>
 
-                <strong style="color:#111827">
+                <strong style="
+                  color:#111827;
+                  min-width: 72px;
+                  text-align: right;
+                  padding-left: 8px;
+                ">
                   ${fmt(value)}
                 </strong>
               </div>
@@ -643,15 +648,15 @@ export default function KelurahanMap({
         <div className="space-y-1 text-[9px] sm:text-[10px]">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-[#FFD100]" />
-            <span>Paslon 01 - Ridwan Kamil</span>
+            <span>Paslon 01 - Ridwan Kamil & Suswono</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-[#16a34a]" />
-            <span>Paslon 02 - Dharma Pongrekun</span>
+            <span>Paslon 02 - Dharma Pongrekun & Kun Wardana Abyoto</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-[#C40000]" />
-            <span>Paslon 03 - Pramono Anung</span>
+            <span>Paslon 03 - Pramono Anung & Rano Karno</span>
           </div>
         </div>
       </div>

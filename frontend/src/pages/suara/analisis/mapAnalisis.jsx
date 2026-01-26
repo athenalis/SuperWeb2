@@ -122,57 +122,69 @@ export default function MapAnalisis({ data }) {
   /* ======================
      TOOLTIP
   ====================== */
-  const onEachFeature = (feature, layer) => {
-    const name = getGeoDistrictName(feature.properties);
-    const key = getDistrictKey(name);
-    const d = districtData[key];
+const onEachFeature = (feature, layer) => {
+  const name = getGeoDistrictName(feature.properties);
+  const key = getDistrictKey(name);
+  const d = districtData[key];
 
-    if (!d) {
-      layer.bindTooltip(
-        `<strong>${name}</strong><br/><i>Data tidak tersedia</i>`,
-        { sticky: true }
-      );
-      return;
-    }
-
-    const partyName = PARTY_NAMES[d.party_winner] || d.party_winner || "-";
-    const paslonName = PASLON_NAMES[d.winner_paslon] || `Paslon ${d.winner_paslon}`;
-    const categoryColor = {
-      "Straight Ticket": "#22c55e",
-      "Split Ticket": "#ef4444",
-      "Non-Partisan": "#facc15",
-    };
-
+  if (!d) {
     layer.bindTooltip(
-      `
-      <div style="font-size:12px; min-width: 180px;">
-        <strong style="font-size:14px;">${d.district}</strong><br/>
-        <hr style="margin: 4px 0; border-color: #e5e7eb;"/>
-        <div style="margin-bottom: 4px;">
-          <span style="color: #6b7280;">Paslon Pemenang:</span><br/>
-          <strong>${paslonName}</strong>
-        </div>
-        <div style="margin-bottom: 4px;">
-          <span style="color: #6b7280;">Partai Dominan:</span><br/>
-          <strong>${partyName}</strong>
-        </div>
-        <div style="margin-top: 8px;">
-          <span style="
-            background: ${categoryColor[d.category] || '#e5e7eb'}; 
-            color: ${d.category === 'Non-Partisan' ? '#000' : '#fff'}; 
-            padding: 2px 8px; 
-            border-radius: 4px; 
-            font-size: 11px;
-            font-weight: 600;
-          ">
-            ${d.category}
-          </span>
-        </div>
-      </div>
-      `,
+      `<strong>${name}</strong><br/><i>Data tidak tersedia</i>`,
       { sticky: true }
     );
+    return;
+  }
+
+  // ✅ Extract party winner dari party_votes
+  const partyWinner = d.party_votes 
+    ? Object.keys(d.party_votes).reduce((a, b) => 
+        d.party_votes[a] > d.party_votes[b] ? a : b
+      )
+    : null;
+
+  // ✅ Convert to number if needed
+  const partyName = PARTY_NAMES[Number(partyWinner)] || 
+                    PARTY_NAMES[partyWinner] || 
+                    "-";
+
+  const paslonName = PASLON_NAMES[d.winner_paslon] || `Paslon ${d.winner_paslon}`;
+  
+  const categoryColor = {
+    "Straight Ticket": "#22c55e",
+    "Split Ticket": "#ef4444",
+    "Non-Partisan": "#facc15",
   };
+
+  layer.bindTooltip(
+    `
+    <div style="font-size:12px; min-width: 180px;">
+      <strong style="font-size:14px;">${d.district}</strong><br/>
+      <hr style="margin: 4px 0; border-color: #e5e7eb;"/>
+      <div style="margin-bottom: 4px;">
+        <span style="color: #6b7280;">Paslon Pemenang:</span><br/>
+        <strong>${paslonName}</strong>
+      </div>
+      <div style="margin-bottom: 4px;">
+        <span style="color: #6b7280;">Partai Dominan:</span><br/>
+        <strong>${partyName}</strong>
+      </div>
+      <div style="margin-top: 8px;">
+        <span style="
+          background: ${categoryColor[d.category] || '#e5e7eb'}; 
+          color: ${d.category === 'Non-Partisan' ? '#000' : '#fff'}; 
+          padding: 2px 8px; 
+          border-radius: 4px; 
+          font-size: 11px;
+          font-weight: 600;
+        ">
+          ${d.category}
+        </span>
+      </div>
+    </div>
+    `,
+    { sticky: true }
+  );
+};
 
   return (
     <div className="relative" style={{ zIndex: 0 }}>

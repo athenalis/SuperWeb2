@@ -71,40 +71,30 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         $user = $request->user();
-
         if (!$user) {
             return response()->json([
                 'status'  => false,
                 'message' => 'Unauthorized',
-                'token_header' => $request->header('Authorization'),
             ], 401);
         }
 
-        // 🔄 UPDATE STATUS USER
-        $user->update([
-            'status' => 'inactive'
-        ]);
+        // ✅ UPDATE STATUS DULU (sebelum token dihapus)
+        $user->update(['status' => 'inactive']);
 
-        // 🔄 UPDATE STATUS BERDASARKAN ROLE
+        // ✅ UPDATE STATUS BERDASARKAN ROLE
         if ($user->role === 'koordinator' && $user->koordinator) {
-            $user->koordinator->update([
-                'status' => 'inactive'
-            ]);
+            $user->koordinator->update(['status' => 'inactive']);
         }
-
         if ($user->role === 'relawan' && $user->relawan) {
-            $user->relawan->update([
-                'status' => 'inactive'
-            ]);
+            $user->relawan->update(['status' => 'inactive']);
         }
 
-        // 🧨 HAPUS TOKEN AKTIF
+        // ✅ HAPUS TOKEN TERAKHIR (setelah semua update selesai)
         $user->currentAccessToken()->delete();
 
         return response()->json([
             'status'  => true,
             'message' => 'Berhasil logout',
-            'token_header' => $request->header('Authorization'),
         ]);
     }
 

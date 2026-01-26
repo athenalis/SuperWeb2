@@ -38,9 +38,20 @@ export default function Navbar() {
     }
     setOpen(false);
   };
-  const handleLogout = () => {
-    localStorage.clear();
-    navigate("/login");
+  // Navbar.jsx & Profile.jsx
+  const handleLogout = async () => {
+    try {
+      // ✅ Panggil API logout dulu
+      await api.post("/logout");
+      toast.success("Berhasil logout");
+    } catch (err) {
+      console.error("Logout error:", err);
+      toast.error("Logout gagal, tapi session tetap dibersihkan");
+    } finally {
+      // ✅ Bersihkan localStorage terakhir
+      localStorage.clear();
+      navigate("/login");
+    }
   };
 
   const [unreadCount, setUnreadCount] = useState(0);
@@ -147,9 +158,8 @@ export default function Navbar() {
                   <span>Suara</span>
                   <Icon
                     icon="mdi:chevron-down"
-                    className={`text-lg translate-y-[1px] transition-transform duration-300 ${
-                      openSuara ? "rotate-180" : "rotate-0"
-                    }`}
+                    className={`text-lg translate-y-[1px] transition-transform duration-300 ${openSuara ? "rotate-180" : "rotate-0"
+                      }`}
                   />
                 </button>
 

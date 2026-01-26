@@ -50,7 +50,7 @@ export default function AnalisisPaslonIndex() {
   const [selectedPaslon, setSelectedPaslon] = useState(null);
 
   useEffect(() => {
-    api.get("/analisis/straight-ticket/district")
+    api.get("/persebaran/straight-ticket/district")
       .then((res) => {
         setData(res.data || []);
       })
@@ -128,7 +128,7 @@ export default function AnalisisPaslonIndex() {
       {/* ================= HEADER + SUMMARY ================= */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 md:p-6 space-y-4">
         <h1 className="text-3xl font-bold text-blue-900">
-          Analisis Pola Straight vs Split Ticket
+          Sebaran Data Pola Straight vs Split Ticket
         </h1>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -332,24 +332,26 @@ function PaslonModal({ data, onClose }) {
               <div className="font-semibold mb-2">Suara Partai</div>
 
               <div className="border rounded-lg overflow-hidden bg-white">
-                {Object.entries(d.party_votes).map(([code, votes], i, arr) => (
-                  <div
-                    key={code}
-                    className={`
-                      flex justify-between items-center
-                      px-3 py-2 text-sm
-                      ${i !== arr.length - 1 ? "border-b border-slate-200" : ""}
-                    `}
-                  >
-                    <span className="text-slate-700">
-                      {PARTY_NAMES[code]}
-                    </span>
+                {Object.entries(d.party_votes)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([code, votes], i, arr) => (
+                    <div
+                      key={code}
+                      className={`
+                        flex justify-between items-center
+                        px-3 py-2 text-sm
+                        ${i !== arr.length - 1 ? "border-b border-slate-200" : ""}
+                      `}
+                    >
+                      <span className="text-slate-700">
+                        {PARTY_NAMES[code]}
+                      </span>
 
-                    <span className="font-medium text-slate-900">
-                      {votes.toLocaleString("id-ID")}
-                    </span>
-                  </div>
-                ))}
+                      <span className="font-medium text-slate-900">
+                        {votes.toLocaleString("id-ID")}
+                      </span>
+                    </div>
+                  ))}
               </div>
             </div>
           </div>

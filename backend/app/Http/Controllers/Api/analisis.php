@@ -58,7 +58,7 @@ class Analisis extends Controller
             }
 
             arsort($partyVotes);
-            $dominantParty = array_key_first($partyVotes);
+            $dominantParty = array_key_first($partyVotes); // 🔥 INI PARTY WINNER!
 
             $category = isset($partyVotes[$dominantParty]) &&
                 in_array($dominantParty, $coalitions[$winner] ?? [])
@@ -70,6 +70,7 @@ class Analisis extends Controller
                 'district_code' => $districtCode,
                 'winner_paslon' => $winner,
                 'votes_paslon' => $votesPaslon,
+                'party_winner' => $dominantParty, // ✅ TAMBAHKAN INI
                 'party_votes' => $partyVotes,
                 'category' => $category,
             ];

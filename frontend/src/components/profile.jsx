@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
+import api from "../lib/axios";
 
 /* =========================
    HELPER
@@ -69,11 +70,19 @@ export default function Profile() {
       document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleLogout = () => {
-    localStorage.clear();
-    navigate("/login");
+  // Navbar.jsx & Profile.jsx
+  const handleLogout = async () => {
+    try {
+      await api.post("/logout");
+    } catch (err) {
+      console.error("Logout error:", err);
+      toast.error("Logout gagal, tapi session tetap dibersihkan");
+    } finally {
+      localStorage.clear();
+      navigate("/login");
+    }
   };
-
+  
   const copyToClipboard = async (text, label) => {
     try {
       // Modern clipboard API

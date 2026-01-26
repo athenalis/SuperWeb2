@@ -53,6 +53,26 @@ const partyColors = {
   "100024": "#000000",
 };
 
+const formatCityLabel = (city = "") => {
+  if (!city) return "";
+
+  let cleaned = city.trim();
+
+  cleaned = cleaned.replace(/^(KOTA)\s+/i, "");
+
+  cleaned = cleaned
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase());
+
+  return `Kota ${cleaned}`;
+};
+
+const formatDistrictLabel = (district = "") => {
+  if (!district) return "";
+  return `Kecamatan ${district
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase())}`;
+};
 
 
 export default function PartaiIndex() {
@@ -61,7 +81,7 @@ export default function PartaiIndex() {
   ====================== */
   const [cities, setCities] = useState([]);
   const [districts, setDistricts] = useState([]);
-
+  const [chartRegionLabel, setChartRegionLabel] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedDistrict, setSelectedDistrict] = useState("");
   const [selectedCityName, setSelectedCityName] = useState("");     // For map filtering (city level)
@@ -82,6 +102,23 @@ export default function PartaiIndex() {
       .then(res => setCities(res.data || []))
       .catch(() => setCities([]));
   }, []);
+
+  useEffect(() => {
+    // PRIORITAS 1: Kecamatan
+    if (selectedDistrictName) {
+      setChartRegionLabel(formatDistrictLabel(selectedDistrictName));
+      return;
+    }
+  
+    // PRIORITAS 2: Kota
+    if (selectedCityName) {
+      setChartRegionLabel(formatCityLabel(selectedCityName));
+      return;
+    }
+  
+    // DEFAULT
+    setChartRegionLabel("");
+  }, [selectedCityName, selectedDistrictName]);  
 
     // Logika untuk menentukan pesan analisis
     const getAnalysisNote = (partyName, totalSuara, cityName) => {
@@ -213,15 +250,19 @@ export default function PartaiIndex() {
       if (found) {
         setSelectedCity(found.city_code);
         setSelectedDistrict("");
-        setSelectedCityName(name);
+        setSelectedCityName(found.city);
         setSelectedDistrictName(""); // Clear district filter when city is clicked
+        setChartRegionLabel(formatCityLabel(found.city));
       }
     } else if (level === "kecamatan") {
       // Find district by name and set selectedDistrict
       const found = districts.find((d) => normalize(d.district) === raw);
       if (found) {
+        setSelectedCity("");
+        setSelectedCityName("");
         setSelectedDistrict(found.district_code);
-        setSelectedDistrictName(name); // Set for single district highlighting
+        setSelectedDistrictName(found.district);
+        setChartRegionLabel(formatDistrictLabel(found.district));
       }
     }
   };
@@ -365,10 +406,12 @@ const echartOption = useMemo(() => ({
                 if (found) {
                   setSelectedCityName(found.city);
                   setSelectedDistrictName("");
+                  setChartRegionLabel(formatCityLabel(found.city));
                 }
               } else {
                 setSelectedCityName("");
                 setSelectedDistrictName("");
+                setChartRegionLabel("");
               }
             }}
           >
@@ -393,14 +436,18 @@ const echartOption = useMemo(() => ({
             onChange={(e) => {
               const districtCode = e.target.value;
               setSelectedDistrict(districtCode);
+              setSelectedCity("");
+              setSelectedCityName("");
 
               if (districtCode) {
                 const found = districts.find(d => d.district_code === districtCode);
                 if (found) {
                   setSelectedDistrictName(found.district);
+                  setChartRegionLabel(formatDistrictLabel(found.district));
                 }
               } else {
                 setSelectedDistrictName("");
+                setChartRegionLabel("");
               }
             }}
           >
@@ -435,6 +482,11 @@ const echartOption = useMemo(() => ({
         <div className="bg-white rounded-2xl border border-slate-300 shadow-sm p-4 h-[500px] flex flex-col">
           <h3 className="font-semibold mb-2">
             Rekapitulasi Suara Partai
+            {chartRegionLabel && (
+              <span className="text-slate-500 font-normal">
+                {" "}({chartRegionLabel})
+              </span>
+            )}
           </h3>
 
           {loading ? (

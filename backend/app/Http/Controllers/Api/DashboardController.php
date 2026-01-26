@@ -76,6 +76,14 @@ class DashboardController extends Controller
     public function progressBar()
     {
         $questions = ['tau_paslon', 'percaya', 'ingin_memilih'];
+
+        // 🔑 Mapping label (TIDAK ubah database)
+        $questionLabels = [
+            'tau_paslon'     => 'Pengenalan Pasangan Calon',
+            'percaya'        => 'Tingkat Kepercayaan',
+            'ingin_memilih'  => 'Niat Memilih',
+        ];
+
         $result = [];
 
         foreach ($questions as $q) {
@@ -90,10 +98,12 @@ class DashboardController extends Controller
             }
 
             $result[] = [
-                'question' => $q,
+                // ⬇️ ganti key teknis jadi label manusia
+                'question' => $questionLabels[$q] ?? $q,
+
                 'percent_positive' => $percent,
-                'positive_count' => $positive, // ini jumlah orang positif
-                'total_count' => $total,       // ini jumlah total orang
+                'positive_count'   => $positive,
+                'total_count'      => $total,
             ];
         }
 
@@ -106,14 +116,14 @@ class DashboardController extends Controller
     public function stackedBar()
     {
         $questions = [
-            'tau_paslon' => 'Tau Paslon',
-            'tau_informasi' => 'Tau Info Pemilu',
-            'tau_visi_misi' => 'Tau Visi & Misi',
-            'tau_program_kerja' => 'Tau Program Kerja',
-            'tau_rekam_jejak' => 'Tau Rekam Jejak',
-            'percaya' => 'Percaya Paslon',
-            'pertimbangan' => 'Pertimbangan Memilih',
-            'ingin_memilih' => 'Mau Memilih'
+            'tau_paslon' => 'Pengenalan Pasangan Calon',
+            'tau_informasi' => 'Pemahaman Informasi Pemilu',
+            'tau_visi_misi' => 'Pemahaman Visi dan Misi',
+            'tau_program_kerja' => 'Penilaian Program Kerja',
+            'tau_rekam_jejak' => 'Penilaian Rekam Jejak',
+            'percaya' => 'Tingkat Kepercayaan',
+            'pertimbangan' => 'Pertimbangan Pemilih',
+            'ingin_memilih' => 'Niat Memilih'
         ];
 
         $result = [];

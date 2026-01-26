@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Icon } from "@iconify/react"
@@ -55,6 +56,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState({ koordinator_total: 0, relawan_total: 0 })
   const [barOption, setBarOption] = useState({});
   const [stackedOption, setStackedOption] = useState({});
+  const [stackedData, setStackedData] = useState([]);
   const [contentSummary, setContentSummary] = useState({
     per_platform: [
       { platform: "TikTok", total: 0 },
@@ -76,21 +78,24 @@ export default function Dashboard() {
   const [progressData, setProgressData] = useState([]);
   const [progressOption, setProgressOption] = useState({});
   const [isMobile, setIsMobile] = useState(false);
+  const [isTablet, setIsTablet] = useState(false);
 
   // Detect screen size
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024);
+    const checkScreenSize = () => {
+      const width = window.innerWidth;
+      setIsMobile(width < 640);
+      setIsTablet(width >= 640 && width < 1024);
     };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token")
     if (!token) return navigate("/login")
-    
+
     Promise.all([
       api.get("/dashboard"),
       api.get("peta/visit"),
@@ -121,17 +126,17 @@ export default function Dashboard() {
   useEffect(() => {
     const sorted = [...contentSummary.per_platform].sort((a, b) => b.total - a.total);
     setBarOption({
-      grid: { 
-        left: isMobile ? 50 : 60, 
-        right: isMobile ? 50 : 70, 
-        top: 30, 
-        bottom: 30 
+      grid: {
+        left: isMobile ? 45 : isTablet ? 55 : 60,
+        right: isMobile ? 45 : isTablet ? 60 : 70,
+        top: 30,
+        bottom: 30
       },
       xAxis: {
         type: "value",
-        axisLabel: { 
-          color: "#64748b", 
-          fontSize: isMobile ? 10 : 12 
+        axisLabel: {
+          color: "#64748b",
+          fontSize: isMobile ? 9 : isTablet ? 11 : 12
         },
         splitLine: { lineStyle: { type: "dashed", color: "#e2e8f0" } }
       },
@@ -142,7 +147,7 @@ export default function Dashboard() {
         axisLabel: {
           color: "#334155",
           fontWeight: "600",
-          fontSize: isMobile ? 11 : 13
+          fontSize: isMobile ? 10 : isTablet ? 12 : 13
         },
         axisTick: { show: false },
         axisLine: { show: false },
@@ -157,197 +162,189 @@ export default function Dashboard() {
               borderRadius: [0, 10, 10, 0]
             }
           })),
-          barWidth: isMobile ? 20 : 26,
+          barWidth: isMobile ? 18 : isTablet ? 22 : 26,
           label: {
             show: true,
             position: "right",
             color: "#0f172a",
             fontWeight: "bold",
-            fontSize: isMobile ? 11 : 14
+            fontSize: isMobile ? 10 : isTablet ? 12 : 14
           },
           animationDuration: 1000,
           animationEasing: "elasticOut",
         }
       ],
     });
-  }, [contentSummary.per_platform, isMobile]);
+  }, [contentSummary.per_platform, isMobile, isTablet]);
 
-  // Stacked bar chart - RESPONSIVE
- useEffect(() => {
-  api.get("/dashboard/stacked-bar").then(res => {
-    if (!res.data.success) return;
-    const data = res.data.data;
+  // Stacked bar chart
+  useEffect(() => {
+    api.get("/dashboard/stacked-bar").then(res => {
+      if (!res.data.success) return;
+      const data = res.data.data;
+      setStackedData(data);
 
-    setStackedOption({
-      tooltip: { show: false },
-      legend: {
-        data: ['Sangat Tidak Setuju', 'Tidak Setuju', 'Setuju', 'Sangat Setuju'],
-        top: isMobile ? 0 : undefined,       // legend di atas untuk mobile
-        bottom: isMobile ? undefined : 20,   // legend di bawah untuk desktop
-        itemWidth: isMobile ? 12 : 16,
-        itemHeight: isMobile ? 12 : 16,
-        itemGap: isMobile ? 10 : 24,
-        icon: 'roundRect',
-        textStyle: {
-          color: '#475569',
-          fontSize: isMobile ? 10 : 13,
-          fontWeight: 600
-        }
-      },
-      grid: { 
-        left: isMobile ? 100 : 180, 
-        right: isMobile ? 40 : 80, 
-        top: isMobile ? 40 : 50,      // beri ruang legend di atas
-        bottom: isMobile ? 60 : 80    // cukup ruang untuk mobile
-      },
-      xAxis: {
-        type: 'value',
-        max: 100,
-        interval: 25,
-        axisLabel: { 
-          formatter: '{value}%', 
-          color: '#64748b', 
-          fontSize: isMobile ? 10 : 13,
-          fontWeight: 600
+      setStackedOption({
+        tooltip: { show: false },
+        legend: {
+          data: ['Sangat Tidak Setuju', 'Tidak Setuju', 'Setuju', 'Sangat Setuju'],
+          top: isMobile ? 0 : undefined,
+          bottom: isMobile ? undefined : 20,
+          itemWidth: isMobile ? 10 : isTablet ? 14 : 16,
+          itemHeight: isMobile ? 10 : isTablet ? 14 : 16,
+          itemGap: isMobile ? 8 : isTablet ? 12 : 24,
+          icon: 'roundRect',
+          textStyle: {
+            color: '#475569',
+            fontSize: isMobile ? 9 : isTablet ? 11 : 13,
+            fontWeight: 600
+          }
         },
-        splitLine: { 
-          lineStyle: { type: 'dashed', color: '#e2e8f0', width: 1.5 } 
+        grid: {
+          left: 10,
+          right: isMobile ? 35 : isTablet ? 30 : 30,
+          top: isMobile ? 35 : isTablet ? 45 : 50,
+          bottom: isMobile ? 55 : isTablet ? 70 : 80
         },
-        axisLine: { lineStyle: { color: '#cbd5e1', width: 2 } },
-        axisTick: { show: false }
-      },
-      yAxis: {
-        type: 'category',
-        inverse: true,
-        data: data.map(d => d.question),
-        axisTick: { show: false },
-        axisLine: { show: false },
-        axisLabel: { 
-          color: '#1e293b', 
-          fontWeight: '700', 
-          fontSize: isMobile ? 10 : 13,
-          lineHeight: isMobile ? 14 : 20,
-          width: isMobile ? 80 : 160,
-          overflow: 'truncate',
-          padding: [0, isMobile ? 8 : 12, 0, 0]
-        }
-      },
-      series: [
-        {
-          name: 'Sangat Tidak Setuju',
-          type: 'bar',
-          stack: 'total',
-          barWidth: isMobile ? '50%' : '65%',
-          itemStyle: { 
-            color: '#FF0000',
-            borderRadius: [6, 0, 0, 6],
-            shadowColor: 'rgba(255, 0, 0, 0.3)',
-            shadowBlur: 8,
-            shadowOffsetY: 2
+        xAxis: {
+          type: 'value',
+          max: 100,
+          interval: 25,
+          axisLabel: {
+            formatter: '{value}%',
+            color: '#64748b',
+            fontSize: isMobile ? 9 : isTablet ? 11 : 13,
+            fontWeight: 600
           },
-          label: {
-            show: true,
-            position: 'inside',
-            color: '#fff',
-            fontSize: isMobile ? 9 : 12,
-            fontWeight: '700',
-            formatter: (params) => {
-              if (params.data.percent < (isMobile ? 10 : 6)) return '';
-              return isMobile 
-                ? `${params.data.count}\n${params.data.percent}%`
-                : `${params.data.count} orang\n(${params.data.percent}%)`;
-            }
+          splitLine: {
+            lineStyle: { type: 'dashed', color: '#e2e8f0', width: 1.5 }
           },
-          data: data.map(d => ({ value: d.percents[1], count: d.counts[1], percent: d.percents[1] }))
+          axisLine: { lineStyle: { color: '#cbd5e1', width: 2 } },
+          axisTick: { show: false }
         },
-        {
-          name: 'Tidak Setuju',
-          type: 'bar',
-          stack: 'total',
-          itemStyle: { color: '#FACC15', shadowColor: 'rgba(250, 204, 21, 0.3)', shadowBlur: 8, shadowOffsetY: 2 },
-          label: {
-            show: true,
-            position: 'inside',
-            color: '#fff',
-            fontSize: isMobile ? 9 : 12,
-            fontWeight: '700',
-            formatter: (params) => {
-              if (params.data.percent < (isMobile ? 10 : 6)) return '';
-              return isMobile 
-                ? `${params.data.count}\n${params.data.percent}%`
-                : `${params.data.count} orang\n(${params.data.percent}%)`;
-            }
-          },
-          data: data.map(d => ({ value: d.percents[2], count: d.counts[2], percent: d.percents[2] }))
+        yAxis: {
+          type: 'category',
+          inverse: true,
+          data: data.map(() => ''),
+          axisTick: { show: false },
+          axisLine: { show: false },
+          axisLabel: { show: false }
         },
-        {
-          name: 'Setuju',
-          type: 'bar',
-          stack: 'total',
-          itemStyle: { color: '#2563EB', shadowColor: 'rgba(37, 99, 235, 0.3)', shadowBlur: 8, shadowOffsetY: 2 },
-          label: {
-            show: true,
-            position: 'inside',
-            color: '#fff',
-            fontSize: isMobile ? 9 : 12,
-            fontWeight: '700',
-            formatter: (params) => {
-              if (params.data.percent < (isMobile ? 10 : 6)) return '';
-              return isMobile 
-                ? `${params.data.count}\n${params.data.percent}%`
-                : `${params.data.count} orang\n(${params.data.percent}%)`;
-            }
+        series: [
+          {
+            name: 'Sangat Tidak Setuju',
+            type: 'bar',
+            stack: 'total',
+            barWidth: isMobile ? '45%' : isTablet ? '55%' : '65%',
+            itemStyle: {
+              color: '#FF0000',
+              borderRadius: [6, 0, 0, 6],
+              shadowColor: 'rgba(255, 0, 0, 0.3)',
+              shadowBlur: 8,
+              shadowOffsetY: 2
+            },
+            label: {
+              show: true,
+              position: 'inside',
+              color: '#fff',
+              fontSize: isMobile ? 8 : isTablet ? 10 : 12,
+              fontWeight: '700',
+              formatter: (params) => {
+                if (params.data.percent < (isMobile ? 12 : 6)) return '';
+                return isMobile
+                  ? `${params.data.count}\n${params.data.percent}%`
+                  : `${params.data.count} orang\n(${params.data.percent}%)`;
+              }
+            },
+            data: data.map(d => ({ value: d.percents[1], count: d.counts[1], percent: d.percents[1] }))
           },
-          data: data.map(d => ({ value: d.percents[3], count: d.counts[3], percent: d.percents[3] }))
-        },
-        {
-          name: 'Sangat Setuju',
-          type: 'bar',
-          stack: 'total',
-          itemStyle: { color: '#22C55E', borderRadius: [0, 6, 6, 0], shadowColor: 'rgba(34, 197, 94, 0.3)', shadowBlur: 8, shadowOffsetY: 2 },
-          label: {
-            show: true,
-            position: 'inside',
-            color: '#fff',
-            fontSize: isMobile ? 9 : 12,
-            fontWeight: '700',
-            formatter: (params) => {
-              if (params.data.percent < (isMobile ? 10 : 6)) return '';
-              return isMobile 
-                ? `${params.data.count}\n${params.data.percent}%`
-                : `${params.data.count} orang\n(${params.data.percent}%)`;
-            }
+          {
+            name: 'Tidak Setuju',
+            type: 'bar',
+            stack: 'total',
+            itemStyle: { color: '#FACC15', shadowColor: 'rgba(250, 204, 21, 0.3)', shadowBlur: 8, shadowOffsetY: 2 },
+            label: {
+              show: true,
+              position: 'inside',
+              color: '#fff',
+              fontSize: isMobile ? 8 : isTablet ? 10 : 12,
+              fontWeight: '700',
+              formatter: (params) => {
+                if (params.data.percent < (isMobile ? 12 : 6)) return '';
+                return isMobile
+                  ? `${params.data.count}\n${params.data.percent}%`
+                  : `${params.data.count} orang\n(${params.data.percent}%)`;
+              }
+            },
+            data: data.map(d => ({ value: d.percents[2], count: d.counts[2], percent: d.percents[2] }))
           },
-          data: data.map(d => ({ value: d.percents[4], count: d.counts[4], percent: d.percents[4] }))
-        }
-      ],
-      animationDuration: 1000,
-      animationEasing: 'cubicOut',
-      animationDelay: (idx) => idx * 50
+          {
+            name: 'Setuju',
+            type: 'bar',
+            stack: 'total',
+            itemStyle: { color: '#2563EB', shadowColor: 'rgba(37, 99, 235, 0.3)', shadowBlur: 8, shadowOffsetY: 2 },
+            label: {
+              show: true,
+              position: 'inside',
+              color: '#fff',
+              fontSize: isMobile ? 8 : isTablet ? 10 : 12,
+              fontWeight: '700',
+              formatter: (params) => {
+                if (params.data.percent < (isMobile ? 12 : 6)) return '';
+                return isMobile
+                  ? `${params.data.count}\n${params.data.percent}%`
+                  : `${params.data.count} orang\n(${params.data.percent}%)`;
+              }
+            },
+            data: data.map(d => ({ value: d.percents[3], count: d.counts[3], percent: d.percents[3] }))
+          },
+          {
+            name: 'Sangat Setuju',
+            type: 'bar',
+            stack: 'total',
+            itemStyle: { color: '#22C55E', borderRadius: [0, 6, 6, 0], shadowColor: 'rgba(34, 197, 94, 0.3)', shadowBlur: 8, shadowOffsetY: 2 },
+            label: {
+              show: true,
+              position: 'inside',
+              color: '#fff',
+              fontSize: isMobile ? 8 : isTablet ? 10 : 12,
+              fontWeight: '700',
+              formatter: (params) => {
+                if (params.data.percent < (isMobile ? 12 : 6)) return '';
+                return isMobile
+                  ? `${params.data.count}\n${params.data.percent}%`
+                  : `${params.data.count} orang\n(${params.data.percent}%)`;
+              }
+            },
+            data: data.map(d => ({ value: d.percents[4], count: d.counts[4], percent: d.percents[4] }))
+          }
+        ],
+        animationDuration: 1000,
+        animationEasing: 'cubicOut',
+        animationDelay: (idx) => idx * 50
+      });
     });
-  });
-}, [isMobile]);
-
+  }, [isMobile, isTablet]);
 
   useEffect(() => {
     if (!visitSummary) return;
     setVisitPieOption({
       tooltip: { show: false },
       legend: {
-        bottom: isMobile ? 5 : 10,
-        itemGap: isMobile ? 8 : 12,
-        itemWidth: isMobile ? 10 : 12,
-        itemHeight: isMobile ? 10 : 12,
+        bottom: isMobile ? 2 : isTablet ? 5 : 10,
+        itemGap: isMobile ? 6 : isTablet ? 8 : 12,
+        itemWidth: isMobile ? 8 : isTablet ? 10 : 12,
+        itemHeight: isMobile ? 8 : isTablet ? 10 : 12,
         icon: 'circle',
         textStyle: {
-          fontSize: isMobile ? 9 : 11,
+          fontSize: isMobile ? 8 : isTablet ? 10 : 11,
           color: '#475569'
         }
       },
       series: [
         {
           type: "pie",
-          radius: '75%',
+          radius: '70%',
           center: ['50%', '45%'],
           data: visitSummary.series.map((i, idx) => ({
             name: i.name,
@@ -365,7 +362,7 @@ export default function Dashboard() {
               },
               label: {
                 show: true,
-                fontSize: isMobile ? 12 : 14,
+                fontSize: isMobile ? 11 : isTablet ? 12 : 14,
                 fontWeight: 'bold'
               }
             }
@@ -374,19 +371,19 @@ export default function Dashboard() {
             show: true,
             position: 'outside',
             formatter: (params) => {
-              return isMobile 
+              return isMobile
                 ? `${params.name}\n${params.percent}%`
                 : `${params.name}\n${params.percent}% (${params.value} orang)`;
             },
-            fontSize: isMobile ? 9 : 11,
+            fontSize: isMobile ? 8 : isTablet ? 9 : 11,
             fontWeight: '600',
             color: '#334155',
-            lineHeight: isMobile ? 12 : 16
+            lineHeight: isMobile ? 10 : isTablet ? 12 : 16
           },
           labelLine: {
             show: true,
-            length: isMobile ? 5 : 10,
-            length2: isMobile ? 5 : 10,
+            length: isMobile ? 3 : isTablet ? 5 : 10,
+            length2: isMobile ? 3 : isTablet ? 5 : 10,
             smooth: true
           },
           animationType: 'scale',
@@ -396,64 +393,57 @@ export default function Dashboard() {
       ],
       color: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4']
     });
-  }, [visitSummary, isMobile]);
+  }, [visitSummary, isMobile, isTablet]);
 
   useEffect(() => {
     if (!progressData.length) return;
-    const labels = progressData.map(i =>
-      i.question.replaceAll("_", " ").toUpperCase()
-    );
+
     setProgressOption({
       grid: {
         left: 10,
-        right: isMobile ? 45 : 60,
+        right: isMobile ? 35 : isTablet ? 120 : 200,
         top: 10,
         bottom: 10,
-        containLabel: true
+        containLabel: false
       },
       xAxis: {
         type: 'value',
         max: 100,
-        axisLabel: { 
-          formatter: '{value}%', 
+        axisLabel: {
+          formatter: '{value}%',
           color: '#64748b',
-          fontSize: isMobile ? 9 : 12
+          fontSize: isMobile ? 8 : isTablet ? 9 : 11
         },
-        splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } }
+        splitLine: {
+          lineStyle: {
+            type: 'dashed',
+            color: '#e2e8f0'
+          }
+        }
       },
       yAxis: {
         type: 'category',
-        data: labels,
+        data: progressData.map(() => ''),
         inverse: true,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: {
-          color: '#334155',
-          fontWeight: 600,
-          fontSize: isMobile ? 9 : 12,
-          lineHeight: isMobile ? 12 : 16,
-          formatter: (value) => {
-            const words = value.split(" ");
-            if (words.length <= 1) return value;
-            let lines = [];
-            for (let i = 0; i < words.length; i += 2) {
-              lines.push(words.slice(i, i + 2).join(" "));
-            }
-            return lines.join("\n");
-          }
-        }
+        axisLabel: { show: false }
       },
       series: [
         {
           type: 'bar',
           data: progressData.map(i => ({
             value: i.percent_positive,
-            labelText: `${i.percent_positive}% (${i.positive_count}/${i.total_count})`
+            labelText: isMobile
+              ? `${i.percent_positive}%`
+              : isTablet
+                ? `${i.percent_positive}% (${i.positive_count}/${i.total_count})`
+                : `${i.percent_positive}% (${i.positive_count}/${i.total_count})`
           })),
-          barWidth: isMobile ? 14 : 18,
+          barWidth: isMobile ? 14 : isTablet ? 16 : 20,
           itemStyle: {
             color: '#2563EB',
-            borderRadius: [0, 10, 10, 0]
+            borderRadius: [0, 8, 8, 0]
           },
           label: {
             show: true,
@@ -461,70 +451,70 @@ export default function Dashboard() {
             formatter: p => p.data.labelText,
             color: '#0f172a',
             fontWeight: 'bold',
-            fontSize: isMobile ? 9 : 12
+            fontSize: isMobile ? 9 : isTablet ? 10 : 12,
+            padding: [0, 0, 0, 6]
           },
           animationDuration: 1000,
           animationEasing: 'elasticOut'
         }
       ]
     });
-  }, [progressData, isMobile]);
+  }, [progressData, isMobile, isTablet]);
 
   return (
-    <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500 px-2 md:px-0">
-      {/* ===== HEADER ===== */}
-      <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-700 text-white rounded-xl md:rounded-2xl p-4 md:p-8 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 md:w-64 md:h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 md:w-48 md:h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+    <div className="space-y-3 sm:space-y-4 md:space-y-6 animate-in fade-in duration-500 px-2 sm:px-3 md:px-0">
+      {/* HEADER */}
+      <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-700 text-white rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-5 md:p-8 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-24 h-24 sm:w-40 sm:h-40 md:w-64 md:h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-0 w-20 h-20 sm:w-32 sm:h-32 md:w-48 md:h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
         <div className="relative z-10">
-          <div className="flex items-center gap-2 md:gap-3 mb-2">
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-white/20 rounded-lg md:rounded-xl flex items-center justify-center backdrop-blur-sm">
-              <Icon icon="solar:home-2-bold" width={isMobile ? 22 : 26} />
+          <div className="flex items-center gap-2 sm:gap-2.5 md:gap-3 mb-1 sm:mb-1.5 md:mb-2">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-white/20 rounded-lg md:rounded-xl flex items-center justify-center backdrop-blur-sm">
+              <Icon icon="solar:home-2-bold" width={isMobile ? 18 : isTablet ? 20 : 26} />
             </div>
             <div>
-              <h1 className="text-xl md:text-3xl font-bold">Selamat Datang, {role}</h1>
-              <p className="text-xs md:text-sm text-blue-100 mt-0.5">Sistem Manajemen SuperWeb</p>
+              <h1 className="text-base sm:text-xl md:text-3xl font-bold">Selamat Datang, {role}</h1>
+              <p className="text-[10px] sm:text-xs md:text-sm text-blue-100 mt-0.5">Sistem Manajemen SuperWeb</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ===== SUMMARY CARDS ===== */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+      {/* SUMMARY CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
         {isLoading ? (
           <>
-            <div className="h-[120px] md:h-[140px] bg-slate-100 animate-pulse rounded-xl md:rounded-2xl" />
-            <div className="h-[120px] md:h-[140px] bg-slate-100 animate-pulse rounded-xl md:rounded-2xl" />
+            <div className="h-24 sm:h-28 md:h-36 bg-slate-100 animate-pulse rounded-lg sm:rounded-xl md:rounded-2xl" />
+            <div className="h-24 sm:h-28 md:h-36 bg-slate-100 animate-pulse rounded-lg sm:rounded-xl md:rounded-2xl" />
           </>
         ) : (
           <>
-            {/* Koordinator Card */}
-            <div className="group bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 text-white p-4 md:p-6 rounded-xl md:rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500" />
+            <div className="group bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 text-white p-3 sm:p-4 md:p-6 rounded-lg sm:rounded-xl md:rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-20 h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500" />
               <div className="relative z-10 flex justify-between items-start">
                 <div>
-                  <div className="text-3xl md:text-4xl font-bold mb-1 md:mb-2">
+                  <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-0.5 sm:mb-1 md:mb-2">
                     <AnimateNumber value={summary.koordinator_total} />
                   </div>
-                  <div className="text-xs md:text-sm text-blue-100 font-medium">Total Koordinator</div>
+                  <div className="text-[10px] sm:text-xs md:text-sm text-blue-100 font-medium">Total Koordinator</div>
                 </div>
-                <div className="w-12 h-12 md:w-14 md:h-14 bg-white/20 rounded-lg md:rounded-xl flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform">
-                  <Icon icon="solar:user-id-bold" width={isMobile ? 24 : 28} />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-white/20 rounded-lg md:rounded-xl flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform">
+                  <Icon icon="solar:user-id-bold" width={isMobile ? 20 : isTablet ? 22 : 28} />
                 </div>
               </div>
             </div>
-            {/* Relawan Card */}
-            <div className="group bg-gradient-to-br from-green-600 via-green-500 to-green-400 text-white p-4 md:p-6 rounded-xl md:rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500" />
+
+            <div className="group bg-gradient-to-br from-green-600 via-green-500 to-green-400 text-white p-3 sm:p-4 md:p-6 rounded-lg sm:rounded-xl md:rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-20 h-20 sm:w-24 sm:h-24 md:w-32 md:h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500" />
               <div className="relative z-10 flex justify-between items-start">
                 <div>
-                  <div className="text-3xl md:text-4xl font-bold mb-1 md:mb-2">
+                  <div className="text-2xl sm:text-3xl md:text-4xl font-bold mb-0.5 sm:mb-1 md:mb-2">
                     <AnimateNumber value={summary.relawan_total} />
                   </div>
-                  <div className="text-xs md:text-sm text-green-100 font-medium">Total Relawan</div>
+                  <div className="text-[10px] sm:text-xs md:text-sm text-green-100 font-medium">Total Relawan</div>
                 </div>
-                <div className="w-12 h-12 md:w-14 md:h-14 bg-white/20 rounded-lg md:rounded-xl flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform">
-                  <Icon icon="solar:users-group-rounded-bold" width={isMobile ? 24 : 28} />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-white/20 rounded-lg md:rounded-xl flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform">
+                  <Icon icon="solar:users-group-rounded-bold" width={isMobile ? 20 : isTablet ? 22 : 28} />
                 </div>
               </div>
             </div>
@@ -532,38 +522,38 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ===== QUICK ACCESS ===== */}
-      <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-8 border border-slate-100">
-        <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-            <Icon icon="solar:widget-4-bold" className="text-blue-600" width={isMobile ? 18 : 22} />
+      {/* QUICK ACCESS */}
+      <div className="bg-white rounded-lg sm:rounded-xl md:rounded-2xl shadow-sm p-3 sm:p-5 md:p-8 border border-slate-100">
+        <div className="flex items-center gap-2 sm:gap-2.5 md:gap-3 mb-3 sm:mb-4 md:mb-6">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+            <Icon icon="solar:widget-4-bold" className="text-blue-600" width={isMobile ? 16 : isTablet ? 18 : 22} />
           </div>
           <div>
-            <h2 className="text-lg md:text-xl font-bold text-slate-800">Akses Cepat</h2>
-            <p className="text-xs md:text-sm text-slate-500">Navigasi cepat ke fitur utama sistem</p>
+            <h2 className="text-sm sm:text-base md:text-xl font-bold text-slate-800">Akses Cepat</h2>
+            <p className="text-[10px] sm:text-xs md:text-sm text-slate-500">Navigasi cepat ke fitur utama sistem</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
           {quickMenus.map(m => (
             <div
               key={m.title}
               onClick={() => navigate(m.path)}
-              className="group cursor-pointer rounded-lg md:rounded-xl border-2 border-slate-100 p-3 md:p-5 hover:border-transparent hover:shadow-lg transition-all duration-300 relative overflow-hidden bg-white"
+              className="group cursor-pointer rounded-lg md:rounded-xl border-2 border-slate-100 p-2 sm:p-3 md:p-5 hover:border-transparent hover:shadow-lg transition-all duration-300 relative overflow-hidden bg-white"
             >
               <div className={`absolute inset-0 bg-gradient-to-br ${m.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
               <div className="relative z-10">
-                <div className="flex flex-col md:flex-row items-start gap-2 md:gap-4 mb-2 md:mb-3">
-                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-gradient-to-br ${m.gradient} text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
-                    <Icon icon={m.icon} width={isMobile ? 20 : 24} />
+                <div className="flex flex-col items-start gap-1.5 sm:gap-2 md:gap-4 mb-1.5 sm:mb-2 md:mb-3">
+                  <div className={`w-8 h-8 sm:w-9 sm:h-9 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-gradient-to-br ${m.gradient} text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
+                    <Icon icon={m.icon} width={isMobile ? 16 : isTablet ? 18 : 24} />
                   </div>
                   <div className="flex-1">
-                    <div className="font-bold text-sm md:text-base text-slate-800 group-hover:text-white transition-colors mb-0.5 md:mb-1">{m.title}</div>
-                    <div className="text-[10px] md:text-xs text-slate-500 group-hover:text-white/80 transition-colors line-clamp-2">{m.desc}</div>
+                    <div className="font-bold text-xs sm:text-sm md:text-base text-slate-800 group-hover:text-white transition-colors mb-0.5">{m.title}</div>
+                    <div className="text-[9px] sm:text-[10px] md:text-xs text-slate-500 group-hover:text-white/80 transition-colors line-clamp-2">{m.desc}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 text-xs md:text-sm font-semibold text-blue-600 group-hover:text-white transition-colors">
+                <div className="flex items-center gap-0.5 sm:gap-1 text-[10px] sm:text-xs md:text-sm font-semibold text-blue-600 group-hover:text-white transition-colors">
                   <span>Buka</span>
-                  <Icon icon="solar:arrow-right-linear" width={isMobile ? 14 : 18} className="group-hover:translate-x-1 transition-transform" />
+                  <Icon icon="solar:arrow-right-linear" width={isMobile ? 12 : isTablet ? 14 : 18} className="group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
             </div>
@@ -593,6 +583,7 @@ export default function Dashboard() {
             />
           </div>
         </div>
+
         {/* Comparison Card */}
         <div className="bg-gradient-to-br from-indigo-600 via-indigo-500 to-purple-600 text-white p-4 md:p-8 rounded-xl md:rounded-2xl shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 md:w-48 md:h-48 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
@@ -649,7 +640,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ===== SURVEY CHART ===== */}
+      {/* ===== SURVEY CHART - DENGAN LABEL MANUAL ===== */}
       <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6 border border-slate-100">
         <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
           <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -660,35 +651,94 @@ export default function Dashboard() {
             <p className="text-xs md:text-sm text-slate-500">Distribusi jawaban responden untuk tiap pertanyaan</p>
           </div>
         </div>
-        <div className="h-[400px] md:h-[500px] mt-3 md:mt-4">
-          <ReactECharts
-            option={stackedOption}
-            notMerge={true}
-            lazyUpdate={true}
-            style={{ height: "100%", width: "100%" }}
-          />
-        </div>
-      </div>
 
-      {/* ===== SURVEY CHART ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-        {/* PERSENTASE DUKUNGAN */}
-        <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6">
-          <h2 className="font-bold text-base md:text-lg mb-3 md:mb-4">Persentase Dukungan</h2>
-          <div className="h-[200px] md:h-[280px]">
+        {/* ✅ CONTAINER FLEX UNTUK LABEL + CHART */}
+        <div className="flex gap-2 md:gap-4 h-[400px] md:h-[500px] mt-3 md:mt-4">
+          {/* ✅ LABEL KIRI (MANUAL) */}
+          <div className="flex flex-col justify-around py-12 md:py-16">
+            {stackedData.map((item, idx) => {
+              const label = item.question;
+              const words = label.split(" ");
+              const mid = Math.ceil(words.length / 2);
+              const line1 = words.slice(0, mid).join(" ");
+              const line2 = words.slice(mid).join(" ");
+
+              return (
+                <div
+                  key={idx}
+                  className="text-[10px] md:text-[13px] font-bold text-slate-800 leading-tight text-left"
+                  style={{ minWidth: isMobile ? '90px' : '160px' }}
+                >
+                  <div>{line1}</div>
+                  <div>{line2 || '\u00A0'}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ✅ CHART KANAN */}
+          <div className="flex-1">
             <ReactECharts
-              option={progressOption}
+              option={stackedOption}
+              notMerge={true}
+              lazyUpdate={true}
               style={{ height: "100%", width: "100%" }}
             />
           </div>
         </div>
-        {/* PIE */}
+      </div>
+
+      {/* ===== ANALISIS CHARTS ===== */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+
+        {/* ✅ PERSENTASE DUKUNGAN - DENGAN LABEL MANUAL */}
+        <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6">
+          <h2 className="font-bold text-base md:text-lg mb-3 md:mb-4">Persentase Dukungan</h2>
+
+          {/* ✅ CONTAINER FLEX */}
+          <div className="flex gap-2 md:gap-3 h-[200px] md:h-[280px]">
+
+            {/* ✅ LABEL KIRI (MANUAL) */}
+            <div className="flex flex-col justify-around py-2">
+              {progressData.map((item, idx) => {
+                const label = item.question.replaceAll("_", " ").toUpperCase();
+                const words = label.split(" ");
+                const mid = Math.ceil(words.length / 2);
+                const line1 = words.slice(0, mid).join(" ");
+                const line2 = words.slice(mid).join(" ");
+
+                return (
+                  <div
+                    key={idx}
+                    className="text-[9px] md:text-[11px] font-semibold text-slate-700 leading-tight text-left"
+                    style={{ minWidth: isMobile ? '100px' : '140px' }}
+                  >
+                    <div>{line1}</div>
+                    <div>{line2 || '\u00A0'}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ✅ CHART KANAN */}
+            <div className="flex-1">
+              <ReactECharts
+                option={progressOption}
+                style={{ height: "100%", width: "100%" }}
+              />
+            </div>
+
+          </div>
+        </div>
+
+        {/* PIE CHART */}
         <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6">
           <h2 className="font-bold text-base md:text-lg mb-3 md:mb-4">Status Kunjungan</h2>
           <div className="h-[200px] md:h-[280px]">
             <ReactECharts option={visitPieOption} style={{ height: "100%" }} />
           </div>
         </div>
+
         {/* HARAPAN */}
         <div className="bg-white rounded-xl md:rounded-2xl shadow-sm p-4 md:p-6 flex flex-col h-[280px] md:h-[360px]">
           <h2 className="font-bold text-base md:text-lg mb-3 md:mb-4">Harapan</h2>
@@ -713,7 +763,7 @@ export default function Dashboard() {
           </div>
           <div>
             <h2 className="text-lg md:text-xl font-bold text-slate-800">Peta Kunjungan</h2>
-            <p className="text-xs md:text-sm text-slate-500">Visualisasi lokasi kunjungan tim</p>
+            <p className="text-xs md:text-sm text-slate-500">Visualisasi lokasi kunjungan tim berdasarkan koordinator</p>
           </div>
         </div>
         <div className="h-[300px] md:h-[400px] rounded-lg md:rounded-xl overflow-hidden bg-slate-50 relative shadow-inner border border-slate-200">

@@ -19,7 +19,31 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 const normalize = (str = "") =>
   str.toString().toUpperCase().replace(/[^A-Z]/g, "");
 
+// Rapikan nama kota untuk label (hindari "Kota KOTA ...")
+const formatCityLabel = (city = "") => {
+  if (!city) return "";
+
+  let cleaned = city.trim();
+
+  cleaned = cleaned.replace(/^(KOTA)\s+/i, "");
+
+  cleaned = cleaned
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase());
+
+  return `Kota ${cleaned}`;
+};
+
+const formatDistrictName = (district = "") => {
+  if (!district) return "";
+
+  return district
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase());
+};
+
 export default function PaslonIndex() {
+  const [chartRegionLabel, setChartRegionLabel] = useState("");
   const [cities, setCities] = useState([]);
   const [districts, setDistricts] = useState([]);
 
@@ -45,6 +69,20 @@ export default function PaslonIndex() {
   const [geoDistrict, setGeoDistrict] = useState(null);
   const [geoVillage, setGeoVillage] = useState(null);
   const [geoSeribu, setGeoSeribu] = useState(null);
+
+  useEffect(() => {
+    if (selectedDistrictName) {
+      setChartRegionLabel(`Kecamatan ${formatDistrictName(selectedDistrictName)}`);
+      return;
+    }
+  
+    if (selectedCityName) {
+      setChartRegionLabel(formatCityLabel(selectedCityName));
+      return;
+    }
+  
+    setChartRegionLabel("");
+  }, [selectedCityName, selectedDistrictName]);  
 
   /* LOAD CITIES for filter dropdown */
   useEffect(() => {
@@ -163,6 +201,7 @@ export default function PaslonIndex() {
         setSelectedDistrictCode("");
         setSelectedCityName(found.city);
         setSelectedDistrictName("");
+        setChartRegionLabel(formatCityLabel(found.city));
       }
     } else if (level === "kecamatan") {
       // Find matching district
@@ -170,6 +209,7 @@ export default function PaslonIndex() {
       if (found) {
         setSelectedDistrictCode(found.district_code);
         setSelectedDistrictName(found.district);
+        setChartRegionLabel(`Kecamatan ${found.district}`);
       } else {
         // If districts not loaded yet, try to find from petaDataKecamatan
         const kecData = petaDataKecamatan.find(d => normalize(d.district) === raw);
@@ -182,6 +222,8 @@ export default function PaslonIndex() {
           }
         }
       }
+    } else if (level === "kelurahan") {
+        setChartRegionLabel(`Kelurahan ${name}`);
     }
     // Kelurahan level - just show info, don't change dropdown (mentok di kecamatan)
   };
@@ -195,6 +237,7 @@ export default function PaslonIndex() {
       setSelectedDistrictCode("");
       setSelectedCityName("");
       setSelectedDistrictName("");
+      setChartRegionLabel("");
     }
   };
 
@@ -228,10 +271,12 @@ export default function PaslonIndex() {
                 if (found) {
                   setSelectedCityName(found.city);
                   setSelectedDistrictName("");
+                  setChartRegionLabel(found ? formatCityLabel(found.city) : "");
                 }
               } else {
                 setSelectedCityName("");
                 setSelectedDistrictName("");
+                setChartRegionLabel("");
               }
             }}
           >
@@ -260,16 +305,18 @@ export default function PaslonIndex() {
                 const found = districts.find(d => d.district_code === districtCode);
                 if (found) {
                   setSelectedDistrictName(found.district);
+                  setChartRegionLabel(`Kecamatan ${found.district}`);
                 }
               } else {
                 setSelectedDistrictName("");
+                setChartRegionLabel("");
               }
             }}
           >
             <option value="">Semua Kecamatan</option>
             {districts.map(d => (
               <option key={d.district_code} value={d.district_code}>
-                {d.district}
+                {formatDistrictName(d.district)}
               </option>
             ))}
           </select>
@@ -290,7 +337,14 @@ export default function PaslonIndex() {
 
         {/* CHART */}
         <div className="bg-white rounded-2xl border border-slate-300 shadow-sm p-4 h-[500px] flex flex-col">
-          <h3 className="font-semibold mb-2">Rekapitulasi Suara Paslon</h3>
+          <h3 className="font-semibold mb-2">
+            Rekapitulasi Suara Paslon
+            {chartRegionLabel && (
+              <span className="text-slate-500 font-normal">
+                {" "}({chartRegionLabel})
+              </span>
+            )}
+          </h3>
 
           {loading ? (
             <div className="text-center text-slate-500 mt-10">
